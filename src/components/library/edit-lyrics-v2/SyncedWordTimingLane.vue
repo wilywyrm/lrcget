@@ -270,7 +270,13 @@
           :progress-ms="progressMs"
           :selected-boundary-index="selectedBoundaryIndex"
           :selected-boundary-indices="selectedBoundaryIndices"
+          :selected-transliteration-system="selectedTransliterationSystem"
+          :active-word-index="activeWordIndex"
           @split-at="handleSegmentSplitAt"
+          @activate-editor="handleActivateEditor"
+          @deactivate-editor="handleDeactivateEditor"
+          @update-reading="handleUpdateReading"
+          @jump-next="jumpToNextNeedsReading"
         />
 
         <button
@@ -347,7 +353,12 @@ import {
 } from '@/composables/edit-lyrics-v2/shortcutRegistry.js'
 import { formatTimestampMs } from '@/utils/lyricsfile.js'
 import { TRANSLITERATION_PRESETS } from '@/composables/edit-lyrics-v2/useEditLyricsV2Document.js'
-import { ensureLineWords, distributeWordTimings, hasValidWords } from '@/utils/word-tokenizer.js'
+import {
+  ensureLineWords,
+  distributeWordTimings,
+  hasValidWords,
+  needsTransliteration,
+} from '@/utils/word-tokenizer.js'
 
 const props = defineProps({
   selectedLine: {
@@ -510,6 +521,11 @@ const laneStartMs = ref(0)
 const laneEndMs = ref(0)
 const segmentedTokenTexts = ref(null)
 const segmentationRequestId = ref(0)
+
+// The single word currently being edited for its transliteration reading, or
+// null. Lane-local (one line is shown at a time), shared across every segment
+// so only one inline reading field is ever open at once.
+const activeWordIndex = ref(null)
 
 const playLineTitle = withShortcutTitle(
   'Play line from beginning',
@@ -814,6 +830,90 @@ const handleSegmentSplitAt = ({ wordIndex, splitIndex, splitRatio }) => {
   selectBoundary(Math.min(updatedWords.length - 1, wordIndex + 1))
 }
 
+// --- Per-word transliteration reading editor (Task 17) -----------------------
+// A single reading field is open at a time, tracked by `activeWordIndex`.
+
+const handleActivateEditor = index => {
+  if (!props.selectedTransliterationSystem) return
+  if (!Number.isInteger(index) || index < 0 || index >= displayedWords.value.length) return
+  activeWordIndex.value = index
+}
+
+// Clear only if the blurring word is still the active one. A Tab-jump reassigns
+// `activeWordIndex` synchronously before the outgoing field's async blur fires,
+// so this guard prevents the blur from clobbering the freshly-focused word.
+const handleDeactivateEditor = index => {
+  if (activeWordIndex.value === index) {
+    activeWordIndex.value = null
+  }
+}
+
+// Write (or clear) a single word's reading under the active system, then persist
+// through the normal word-update path. Blank input deletes the key; an emptied
+// reading map is dropped entirely so a bare `{}` is never stored.
+const setWordReading = (index, value) => {
+  const system = props.selectedTransliterationSystem
+  if (!system) return
+
+  const list = displayedWords.value
+  if (!Number.isInteger(index) || index < 0 || index >= list.length) return
+
+  const raw = typeof value === 'string' ? value : ''
+  const nextWords = list.map((word, i) => {
+    if (i !== index) return word
+
+    const nextMap = { ...(word.transliteration || {}) }
+    if (raw.trim() === '') {
+      delete nextMap[system.id]
+    } else {
+      nextMap[system.id] = raw
+    }
+
+    const nextWord = { ...word }
+    if (Object.keys(nextMap).length > 0) {
+      nextWord.transliteration = nextMap
+    } else {
+      delete nextWord.transliteration
+    }
+    return nextWord
+  })
+
+  emit('update:words', {
+    lineIndex: props.selectedLineIndex,
+    words: nextWords,
+  })
+}
+
+const handleUpdateReading = ({ index, value }) => {
+  setWordReading(index, value)
+}
+
+// Move focus to the next word (wrapping once) that still needs a reading under
+// the active system. When none remain, close the editor.
+const jumpToNextNeedsReading = fromIndex => {
+  const system = props.selectedTransliterationSystem
+  if (!system) return
+
+  const list = displayedWords.value
+  const count = list.length
+  if (count === 0) {
+    activeWordIndex.value = null
+    return
+  }
+
+  const start = Number.isInteger(fromIndex) ? fromIndex : -1
+  for (let step = 1; step <= count; step++) {
+    const j = (start + step) % count
+    if (j === start) break
+    if (needsTransliteration(list[j], system.id)) {
+      activeWordIndex.value = j
+      return
+    }
+  }
+
+  activeWordIndex.value = null
+}
+
 const loadDefaultSegmentation = async ({ force = false } = {}) => {
   if (!isWordSyncAvailable.value) {
     segmentedTokenTexts.value = null
@@ -882,6 +982,9 @@ watch(
     // Only reset boundary index when actually moving to a different line.
     if (newIndex !== oldIndex) {
       resetBoundarySelection()
+      // A different line's words are a different set — close any open reading
+      // editor so it can't linger on a stale word index.
+      activeWordIndex.value = null
     }
     syncLaneWindowToSelection()
     segmentedTokenTexts.value = null
@@ -891,6 +994,26 @@ watch(
     })
   },
   { immediate: true }
+)
+
+// Switching (or clearing) the active reading system closes any open editor: the
+// readings it was editing belong to a different key.
+watch(
+  () => props.selectedTransliterationSystem?.id ?? null,
+  () => {
+    activeWordIndex.value = null
+  }
+)
+
+// If the visible word count shrinks (merge/split/reset) past the active index,
+// drop the editor rather than leave it pointing at a word that no longer exists.
+watch(
+  () => displayedWords.value.length,
+  length => {
+    if (activeWordIndex.value !== null && activeWordIndex.value >= length) {
+      activeWordIndex.value = null
+    }
+  }
 )
 
 const handleResetWords = async () => {

@@ -11,6 +11,40 @@
     @click="handleSegmentClick"
     @dblclick.stop="handleSegmentDoubleClick"
   >
+    <!-- Static ruby: quietly floats the stored reading above words that already
+         have one. Click it to open the inline editor. Rendered as a sibling of
+         the (overflow-hidden) base so its negative offset isn't clipped. -->
+    <div
+      v-if="showRubyStatic"
+      class="ruby-reading-static text-neutral-500 dark:text-neutral-400"
+      :title="`Reading: ${wordReading} — click to edit`"
+      @click.stop="activateEditor"
+      @mousedown.stop
+      @dblclick.stop
+    >
+      {{ wordReading }}
+    </div>
+
+    <!-- Active editor: a single reading field, only for the focused word,
+         floating just above the base text. -->
+    <input
+      v-if="isActiveWord"
+      ref="readingInput"
+      class="ruby-reading-input border border-hoa-1100 bg-white text-neutral-800 dark:bg-neutral-900 dark:text-neutral-100"
+      :value="wordReading"
+      :placeholder="word.text"
+      spellcheck="false"
+      autocomplete="off"
+      @input="updateReading($event.target.value)"
+      @blur="deactivateEditor"
+      @keydown.tab.prevent="jumpToNextNeedsReading"
+      @keydown.enter.prevent="jumpToNextNeedsReading"
+      @keydown.esc.prevent="deactivateEditor"
+      @click.stop
+      @mousedown.stop
+      @dblclick.stop
+    />
+
     <div
       ref="previewContainerElement"
       class="relative flex items-center justify-center w-full h-full min-w-0 overflow-hidden"
@@ -53,11 +87,18 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import Alert from '~icons/mdi/alert'
 import { formatTimestampMs } from '@/utils/lyricsfile.js'
+import { needsTransliteration } from '@/utils/word-tokenizer.js'
 
-const emit = defineEmits(['split-at'])
+const emit = defineEmits([
+  'split-at',
+  'activate-editor',
+  'deactivate-editor',
+  'update-reading',
+  'jump-next',
+])
 
 const props = defineProps({
   word: {
@@ -112,12 +153,21 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  selectedTransliterationSystem: {
+    type: Object,
+    default: null,
+  },
+  activeWordIndex: {
+    type: Number,
+    default: null,
+  },
 })
 
 const segmentElement = ref(null)
 const previewContainerElement = ref(null)
 const textElement = ref(null)
 const hoverPreview = ref(null)
+const readingInput = ref(null)
 
 const nextWordHintText = computed(() => (props.nextWordText || '').trim())
 
@@ -350,6 +400,38 @@ const hasStartAfterEndWarning = computed(() => {
   return Number.isFinite(startMs) && Number.isFinite(endMs) && startMs > endMs
 })
 
+// The active reading system (`{ id, system }`) or null when none is declared.
+// Every ruby affordance below is gated on this — no system means no ruby, no
+// highlight, no editor: the timeline behaves exactly as before.
+const activeSystem = computed(() => props.selectedTransliterationSystem)
+
+// This word's stored reading under the active system, or '' when absent.
+const wordReading = computed(() => {
+  const system = activeSystem.value
+  if (!system) return ''
+  const map = props.word?.transliteration
+  return (map && map[system.id]) || ''
+})
+
+// A kanji/hanzi word "needs a reading" when a transliteration system is active
+// and this word has ideographs but no stored reading under that system. This is
+// the discovery cue that opens the per-word reading editor (Task 17).
+const needsReading = computed(() => {
+  const system = activeSystem.value
+  return Boolean(system && needsTransliteration(props.word, system.id))
+})
+
+// Exactly one word per line is "active" at a time (index shared by the lane).
+const isActiveWord = computed(
+  () => Boolean(activeSystem.value) && props.activeWordIndex === props.wordIndex
+)
+
+// Static ruby floats above words that already HAVE a reading — but never while
+// this word is being edited (the input replaces it).
+const showRubyStatic = computed(
+  () => Boolean(activeSystem.value && wordReading.value) && !isActiveWord.value
+)
+
 const segmentClass = computed(() => {
   const baseClasses = [
     'bg-neutral-200 dark:bg-neutral-700',
@@ -370,6 +452,10 @@ const segmentClass = computed(() => {
       'border-hoa-1100',
       'dark:border-hoa-1100'
     )
+  }
+
+  if (needsReading.value && !isActiveWord.value) {
+    baseClasses.push('needs-transliteration')
   }
 
   return baseClasses
@@ -405,14 +491,56 @@ const handleSegmentDoubleClick = event => {
   })
 }
 
+// Open the inline reading editor for this word (single active word per line).
+const activateEditor = () => {
+  if (!activeSystem.value) return
+  emit('activate-editor', props.wordIndex)
+}
+
+// Close the editor. The lane only clears if THIS word is still the active one,
+// so a Tab-jump that has already moved focus onward isn't clobbered.
+const deactivateEditor = () => {
+  emit('deactivate-editor', props.wordIndex)
+}
+
+// Persist a reading edit upward. Empty/blank clears the key (never writes `{}`).
+const updateReading = value => {
+  emit('update-reading', { index: props.wordIndex, value })
+}
+
+// Tab/Enter advances to the next word in the line that still needs a reading.
+const jumpToNextNeedsReading = () => {
+  emit('jump-next', props.wordIndex)
+}
+
 // Suppress click bubbling to the timeline (which would seek) whenever the
 // split preview is rendered. `hoverPreview` is non-null iff the splitter UI
 // is visible, so this guarantees: preview visible -> no seek on click.
 const handleSegmentClick = event => {
   if (hoverPreview.value) {
     event.stopPropagation()
+    return
+  }
+
+  // A highlighted (needs-reading) word is the "add a reading here" affordance:
+  // clicking it opens the per-word reading editor (Task 17) instead of seeking.
+  if (activeSystem.value && needsReading.value) {
+    event.stopPropagation()
+    activateEditor()
   }
 }
+
+// When this word becomes active, focus its field and select the current text so
+// typing immediately replaces it.
+watch(isActiveWord, active => {
+  if (!active) return
+  nextTick(() => {
+    const el = readingInput.value
+    if (!el) return
+    el.focus()
+    el.select()
+  })
+})
 
 const handleSegmentHover = event => {
   hoverPreview.value = getSplitPreview(event.clientX)
@@ -428,5 +556,45 @@ const handleSegmentLeave = () => {
 .word-segment {
   user-select: none;
   touch-action: none;
+}
+
+/* Subtle "needs a reading" affordance: a low-noise amber underline (not a box)
+   marking kanji/hanzi words that lack a transliteration in the active system.
+   Clicking the segment opens the per-word reading editor. */
+.needs-transliteration {
+  border-bottom: 2px solid var(--amber-400, #fbbf24);
+  cursor: pointer;
+}
+
+/* Static ruby: quiet, non-interactive-looking reading that sits just above the
+   base word. Only words that already HAVE a reading render this. */
+.ruby-reading-static {
+  position: absolute;
+  top: -1.2em;
+  left: 0;
+  z-index: 30;
+  max-width: 12rem;
+  font-size: 0.65em;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+/* Active editor: a single reading field, only for the focused word, floating
+   just above the base text. */
+.ruby-reading-input {
+  position: absolute;
+  top: -1.6em;
+  left: 0;
+  z-index: 40;
+  width: 100%;
+  min-width: 3.5rem;
+  padding: 0 2px;
+  font-size: 0.65em;
+  line-height: 1.4;
+  border-radius: 3px;
+  outline: none;
 }
 </style>
