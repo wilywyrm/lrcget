@@ -99,6 +99,10 @@ const cloneWords = words => {
     text: typeof word?.text === 'string' ? word.text : '',
     start_ms: Number.isFinite(word?.start_ms) ? Math.max(0, Math.round(word.start_ms)) : undefined,
     end_ms: Number.isFinite(word?.end_ms) ? Math.max(0, Math.round(word.end_ms)) : undefined,
+    transliteration:
+      word?.transliteration && typeof word.transliteration === 'object'
+        ? { ...word.transliteration }
+        : undefined,
   }))
 }
 
@@ -111,6 +115,10 @@ export const normalizeSyncedLine = (line, fallbackText = '') => {
     id: Number.isFinite(line?.id) ? line.id : nextLineId(),
     text,
     words,
+    transliteration:
+      line?.transliteration && typeof line.transliteration === 'object'
+        ? { ...line.transliteration }
+        : undefined,
   }
 
   if (Number.isFinite(line?.start_ms)) {
@@ -222,6 +230,7 @@ export const parseLyricsfile = lyricsfileContent => {
     syncedLyrics,
     syncedLines: cloneSyncedLines(lines),
     isInstrumental,
+    transliterations: Array.isArray(metadata.transliterations) ? metadata.transliterations : [],
     document,
   }
 }
@@ -251,6 +260,48 @@ export const normalizeLrclibLyrics = item => {
     instrumental: instrumental || Boolean(parsed.isInstrumental),
     hasLyricsfile: true,
   }
+}
+
+// YAML.stringify skips `undefined` but emits empty objects as `{}`; spec §5
+// requires omitting the transliteration key entirely (never `{}`) when a
+// line/word has no reading. So collapse empty maps to `undefined` here.
+const nonEmptyTransliteration = map => {
+  if (!map || typeof map !== 'object') {
+    return undefined
+  }
+
+  return Object.keys(map).length > 0 ? { ...map } : undefined
+}
+
+const toPersistableWord = word => {
+  const copy = { ...word }
+  const transliteration = nonEmptyTransliteration(copy.transliteration)
+
+  if (transliteration) {
+    copy.transliteration = transliteration
+  } else {
+    delete copy.transliteration
+  }
+
+  return copy
+}
+
+const toPersistableLine = line => {
+  const copy = { ...line }
+  delete copy.id
+
+  const transliteration = nonEmptyTransliteration(copy.transliteration)
+  if (transliteration) {
+    copy.transliteration = transliteration
+  } else {
+    delete copy.transliteration
+  }
+
+  if (Array.isArray(copy.words)) {
+    copy.words = copy.words.map(toPersistableWord)
+  }
+
+  return copy
 }
 
 export const serializeLyricsfile = ({
@@ -313,14 +364,11 @@ export const serializeLyricsfile = ({
     metadata.language = baseMetadata.language
   }
 
-  const persistableLines =
-    lines.length > 0
-      ? lines.map(line => {
-          const copy = { ...line }
-          delete copy.id
-          return copy
-        })
-      : null
+  if (Array.isArray(baseMetadata.transliterations) && baseMetadata.transliterations.length > 0) {
+    metadata.transliterations = baseMetadata.transliterations.map(entry => ({ ...entry }))
+  }
+
+  const persistableLines = lines.length > 0 ? lines.map(toPersistableLine) : null
 
   return YAML.stringify({
     version: LYRICSFILE_VERSION,

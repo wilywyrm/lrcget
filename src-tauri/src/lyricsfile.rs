@@ -3,6 +3,7 @@ use crate::persistent_entities::PersistentTrack;
 use crate::utils::strip_timestamp;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 pub const LYRICSFILE_VERSION: &str = "1.0";
 pub const INSTRUMENTAL_LRC: &str = "[au: instrumental]";
@@ -50,7 +51,13 @@ pub struct ParsedLyricsfile {
     pub is_instrumental: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct TransliterationDecl {
+    pub id: String,
+    pub system: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 struct LyricsfileDocument {
     version: String,
     metadata: LyricsfileMetadata,
@@ -71,7 +78,10 @@ struct LyricsfileMetadata {
     offset_ms: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     language: Option<String>,
+    #[serde(default)]
     instrumental: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transliterations: Option<Vec<TransliterationDecl>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -80,6 +90,8 @@ struct LyricsfileLine {
     start_ms: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     end_ms: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transliteration: Option<BTreeMap<String, String>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     words: Vec<LyricsfileWord>,
 }
@@ -90,6 +102,8 @@ struct LyricsfileWord {
     start_ms: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     end_ms: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transliteration: Option<BTreeMap<String, String>>,
 }
 
 fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
@@ -155,6 +169,7 @@ pub fn build_lyricsfile(
             offset_ms: None,
             language: None,
             instrumental: is_instrumental,
+            transliterations: None,
         },
         lines: synced_lines,
         plain: plain_for_document,
@@ -241,6 +256,7 @@ fn parse_lrc_lines(synced_lyrics: &str) -> Vec<LyricsfileLine> {
                 text: timed_line.text.clone(),
                 start_ms,
                 end_ms,
+                transliteration: None,
                 words: Vec::new(),
             }
         })
@@ -275,4 +291,139 @@ fn normalize_non_empty(value: Option<&str>) -> Option<String> {
     value
         .map(str::to_string)
         .filter(|content| !content.trim().is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TRANSLITERATION_YAML: &str = r#"version: '1.0'
+metadata:
+  title: 'Song'
+  artist: 'Artist'
+  language: 'ja'
+  transliterations:
+    - id: hira
+      system: 'ja-Hrkt'
+    - id: romaji
+      system: 'ja-Latn'
+lines:
+  - text: '今日は'
+    start_ms: 1000
+    end_ms: 3000
+    transliteration:
+      hira: 'きょうは'
+      romaji: 'kyō wa'
+    words:
+      - text: '今日'
+        start_ms: 1000
+        end_ms: 2000
+        transliteration:
+          hira: 'きょう'
+          romaji: 'kyō'
+      - text: 'は'
+        start_ms: 2000
+        end_ms: 3000
+        transliteration:
+          romaji: 'wa'
+plain: |
+  今日は
+"#;
+
+    #[test]
+    fn transliteration_metadata_and_maps_round_trip() {
+        let document: LyricsfileDocument =
+            serde_yaml::from_str(TRANSLITERATION_YAML).expect("fixture YAML should parse");
+
+        let declarations = document
+            .metadata
+            .transliterations
+            .as_ref()
+            .expect("transliterations should be present");
+        assert_eq!(declarations.len(), 2);
+        assert_eq!(declarations[0].id, "hira");
+        assert_eq!(declarations[0].system, "ja-Hrkt");
+        assert_eq!(declarations[1].id, "romaji");
+        assert_eq!(declarations[1].system, "ja-Latn");
+
+        let line = &document.lines[0];
+        let line_map = line
+            .transliteration
+            .as_ref()
+            .expect("line transliteration should be present");
+        assert_eq!(line_map.get("hira").map(String::as_str), Some("きょうは"));
+        assert_eq!(line_map.get("romaji").map(String::as_str), Some("kyō wa"));
+
+        let kanji_word = &line.words[0];
+        let kanji_map = kanji_word
+            .transliteration
+            .as_ref()
+            .expect("kanji word transliteration should be present");
+        assert_eq!(kanji_map.get("hira").map(String::as_str), Some("きょう"));
+        assert_eq!(kanji_map.get("romaji").map(String::as_str), Some("kyō"));
+
+        let kana_word = &line.words[1];
+        let kana_map = kana_word
+            .transliteration
+            .as_ref()
+            .expect("kana word transliteration should be present");
+        assert!(kana_map.get("hira").is_none(), "pure kana omits the hira key");
+        assert_eq!(kana_map.get("romaji").map(String::as_str), Some("wa"));
+
+        let serialized = serde_yaml::to_string(&document).expect("serialize document");
+        let reparsed: LyricsfileDocument =
+            serde_yaml::from_str(&serialized).expect("re-parse serialized document");
+
+        assert_eq!(
+            document.metadata.transliterations,
+            reparsed.metadata.transliterations
+        );
+        assert_eq!(document.lines.len(), reparsed.lines.len());
+        for (before, after) in document.lines.iter().zip(reparsed.lines.iter()) {
+            assert_eq!(before.transliteration, after.transliteration);
+            assert_eq!(before.words.len(), after.words.len());
+            for (word_before, word_after) in before.words.iter().zip(after.words.iter()) {
+                assert_eq!(word_before.transliteration, word_after.transliteration);
+            }
+        }
+    }
+
+    #[test]
+    fn transliteration_fixture_round_trips_structurally() {
+        let fixture = include_str!("../testdata/ja_transliteration.lyricsfile");
+        let document: LyricsfileDocument =
+            serde_yaml::from_str(fixture).expect("fixture should parse");
+
+        assert_eq!(
+            document
+                .metadata
+                .transliterations
+                .as_ref()
+                .expect("fixture declares transliterations")
+                .len(),
+            2
+        );
+
+        let serialized = serde_yaml::to_string(&document).expect("serialize fixture");
+
+        println!("===RUST_YAML_START===");
+        print!("{serialized}");
+        println!("===RUST_YAML_END===");
+
+        let reparsed: LyricsfileDocument =
+            serde_yaml::from_str(&serialized).expect("re-parse serialized fixture");
+
+        assert_eq!(
+            document.metadata.transliterations,
+            reparsed.metadata.transliterations
+        );
+        assert_eq!(document.lines.len(), reparsed.lines.len());
+        for (before, after) in document.lines.iter().zip(reparsed.lines.iter()) {
+            assert_eq!(before.transliteration, after.transliteration);
+            assert_eq!(before.words.len(), after.words.len());
+            for (word_before, word_after) in before.words.iter().zip(after.words.iter()) {
+                assert_eq!(word_before.transliteration, word_after.transliteration);
+            }
+        }
+    }
 }
