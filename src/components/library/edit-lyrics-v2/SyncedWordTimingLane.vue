@@ -45,6 +45,84 @@
         </div>
 
         <div class="flex items-center gap-2">
+          <VDropdown
+            theme="lrcget-dropdown"
+            placement="bottom-end"
+            :shown="isPickerOpen"
+            @apply-show="openPicker"
+            @apply-hide="closePicker"
+          >
+            <button
+              class="button button-normal text-xs px-2 py-1 rounded flex items-center gap-1"
+              title="Add a transliteration reading system"
+              type="button"
+            >
+              <Plus class="w-3.5 h-3.5" />
+              <span>Add reading system</span>
+            </button>
+
+            <template #popper>
+              <div class="dropdown-container min-w-[13rem]">
+                <div class="dropdown-section-label">Add reading system</div>
+                <template v-if="!isCustomInput">
+                  <button
+                    v-for="presetName in orderedPresetNames"
+                    :key="presetName"
+                    v-close-popper
+                    class="dropdown-item"
+                    type="button"
+                    @click="choosePreset(presetName)"
+                  >
+                    <span class="dropdown-label">{{ presetName }}</span>
+                    <span class="ml-auto text-xs text-neutral-500 dark:text-neutral-400 font-mono">
+                      {{ TRANSLITERATION_PRESETS[presetName] }}
+                    </span>
+                  </button>
+                  <div class="dropdown-divider" />
+                  <button
+                    class="dropdown-item"
+                    type="button"
+                    @click="isCustomInput = true"
+                  >
+                    <span class="dropdown-label">Custom…</span>
+                  </button>
+                </template>
+
+                <div v-else class="px-2 py-2 flex flex-col gap-2">
+                  <label class="text-xs text-neutral-600 dark:text-neutral-400">
+                    BCP-47 locale tag
+                  </label>
+                  <input
+                    v-model="customSystemText"
+                    type="text"
+                    class="input px-3 h-8 w-full"
+                    placeholder="e.g. ja-Latn"
+                    @keydown.enter.prevent="submitCustomSystem"
+                  />
+                  <div class="flex justify-end gap-2">
+                    <button
+                      class="button button-normal px-3 h-7 rounded text-xs"
+                      type="button"
+                      @click="isCustomInput = false"
+                    >
+                      Back
+                    </button>
+                    <button
+                      v-close-popper
+                      class="button button-primary px-3 h-7 rounded text-xs"
+                      :class="{ 'button-disabled': !customSystemText.trim() }"
+                      :disabled="!customSystemText.trim()"
+                      type="button"
+                      @click="submitCustomSystem"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </VDropdown>
+
           <button
             v-if="filePath"
             class="button button-normal rounded-full h-6 w-6 flex items-center justify-center"
@@ -82,6 +160,71 @@
       </div>
 
       <div class="relative flex flex-col flex-1 min-h-0">
+      <div
+        v-if="showSystemDropdown"
+        class="flex items-center gap-2 mb-2 shrink-0"
+      >
+        <label class="text-xs text-neutral-600 dark:text-neutral-400">Reading</label>
+        <select
+          class="select select-xs"
+          :value="selectedTransliterationSystem?.id ?? ''"
+          @change="onSelectSystem"
+        >
+          <option
+            v-for="entry in declaredSystems"
+            :key="entry.id"
+            :value="entry.id"
+          >
+            {{ systemLabel(entry.system) }} ({{ entry.system }})
+          </option>
+        </select>
+
+        <template v-if="editingSystemId === selectedTransliterationSystem?.id && selectedTransliterationSystem">
+          <input
+            v-model="editingSystemText"
+            type="text"
+            class="input px-3 h-7 w-[10rem]"
+            placeholder="BCP-47 tag"
+            @keydown.enter.prevent="confirmEditSystem"
+            @keydown.esc.prevent="cancelEditSystem"
+          />
+          <button
+            class="button button-primary rounded h-7 w-7 flex items-center justify-center"
+            title="Confirm re-tag"
+            type="button"
+            @click="confirmEditSystem"
+          >
+            <Check class="w-3.5 h-3.5" />
+          </button>
+          <button
+            class="button button-normal rounded h-7 w-7 flex items-center justify-center"
+            title="Cancel"
+            type="button"
+            @click="cancelEditSystem"
+          >
+            <Close class="w-3.5 h-3.5" />
+          </button>
+        </template>
+        <template v-else-if="selectedTransliterationSystem">
+          <button
+            class="button button-normal rounded h-7 w-7 flex items-center justify-center"
+            title="Edit reading system locale"
+            type="button"
+            @click="startEditSystem(selectedTransliterationSystem)"
+          >
+            <Pencil class="w-3.5 h-3.5" />
+          </button>
+          <button
+            class="button button-normal rounded h-7 w-7 flex items-center justify-center"
+            title="Remove reading system"
+            type="button"
+            @click="confirmRemoveSystem(selectedTransliterationSystem)"
+          >
+            <Trash class="w-3.5 h-3.5" />
+          </button>
+        </template>
+      </div>
+
       <SpectrogramPanel
         v-if="filePath && spectrogramVisible"
         :file-path="filePath"
@@ -188,6 +331,10 @@ import Play from '~icons/mdi/play'
 import Close from '~icons/mdi/close'
 import Waveform from '~icons/mdi/waveform'
 import EyeOff from '~icons/mdi/eye-off'
+import Plus from '~icons/mdi/plus'
+import Pencil from '~icons/mdi/pencil'
+import Trash from '~icons/mdi/trash-can'
+import Check from '~icons/mdi/check'
 import { useGlobalState } from '@/composables/global-state.js'
 import SpectrogramPanel from '@/components/library/edit-lyrics-v2/SpectrogramPanel.vue'
 import SyncedWordTimingSegment from '@/components/library/edit-lyrics-v2/SyncedWordTimingSegment.vue'
@@ -199,6 +346,7 @@ import {
   withShortcutTitle,
 } from '@/composables/edit-lyrics-v2/shortcutRegistry.js'
 import { formatTimestampMs } from '@/utils/lyricsfile.js'
+import { TRANSLITERATION_PRESETS } from '@/composables/edit-lyrics-v2/useEditLyricsV2Document.js'
 import { ensureLineWords, distributeWordTimings, hasValidWords } from '@/utils/word-tokenizer.js'
 
 const props = defineProps({
@@ -226,11 +374,135 @@ const props = defineProps({
     type: String,
     default: null,
   },
+  declaredTransliterations: {
+    type: Array,
+    default: () => [],
+  },
+  selectedTransliterationSystem: {
+    type: Object,
+    default: null,
+  },
+  documentLanguage: {
+    type: String,
+    default: null,
+  },
 })
 
-const emit = defineEmits(['update:words', 'word-timing-edited', 'play-line', 'select-next-line', 'seek'])
+const emit = defineEmits([
+  'update:words',
+  'word-timing-edited',
+  'play-line',
+  'select-next-line',
+  'seek',
+  'update:selected-transliteration-system',
+  'add-transliteration-system',
+  'edit-transliteration-system',
+  'remove-transliteration-system',
+])
 
 const { spectrogramVisible, toggleSpectrogramVisible } = useGlobalState()
+
+const PRESET_NAMES = Object.keys(TRANSLITERATION_PRESETS)
+
+// Presets whose locale matches the document language float to the top of the
+// picker. Match on the primary subtag (before the first '-') of each system.
+const LANGUAGE_PRESET_PRIORITY = {
+  ja: ['Furigana', 'Romaji'],
+  zh: ['Pinyin', 'Zhuyin'],
+  ko: ['Romaja'],
+}
+
+const declaredSystems = computed(() => props.declaredTransliterations ?? [])
+
+const showSystemDropdown = computed(() => declaredSystems.value.length >= 2)
+
+const systemLabel = system => {
+  const preset = PRESET_NAMES.find(name => TRANSLITERATION_PRESETS[name] === system)
+  return preset || system
+}
+
+const orderedPresetNames = computed(() => {
+  const lang = (props.documentLanguage || '').split('-')[0].toLowerCase()
+  const prioritized = LANGUAGE_PRESET_PRIORITY[lang] || []
+  const rest = PRESET_NAMES.filter(name => !prioritized.includes(name))
+  return [...prioritized, ...rest]
+})
+
+const isPickerOpen = ref(false)
+const isCustomInput = ref(false)
+const customSystemText = ref('')
+
+const openPicker = () => {
+  isPickerOpen.value = true
+  isCustomInput.value = false
+  customSystemText.value = ''
+}
+
+const closePicker = () => {
+  isPickerOpen.value = false
+  isCustomInput.value = false
+  customSystemText.value = ''
+}
+
+const choosePreset = presetName => {
+  emit('add-transliteration-system', { presetName, customSystem: null })
+  closePicker()
+}
+
+const submitCustomSystem = () => {
+  const value = customSystemText.value.trim()
+  if (!value) return
+  emit('add-transliteration-system', { presetName: value, customSystem: value })
+  closePicker()
+}
+
+const onSelectSystem = event => {
+  const id = event.target.value
+  const entry = declaredSystems.value.find(system => system.id === id)
+  emit('update:selected-transliteration-system', entry ? { ...entry } : null)
+}
+
+const editingSystemId = ref(null)
+const editingSystemText = ref('')
+
+const startEditSystem = entry => {
+  editingSystemId.value = entry.id
+  editingSystemText.value = entry.system
+}
+
+const cancelEditSystem = () => {
+  editingSystemId.value = null
+  editingSystemText.value = ''
+}
+
+const confirmEditSystem = () => {
+  const value = editingSystemText.value.trim()
+  if (!value || editingSystemId.value == null) {
+    cancelEditSystem()
+    return
+  }
+  if (
+    !window.confirm(
+      'Re-tagging this reading system will re-key every existing word reading under it. Continue?'
+    )
+  ) {
+    return
+  }
+  emit('edit-transliteration-system', { oldId: editingSystemId.value, newSystem: value })
+  cancelEditSystem()
+}
+
+const confirmRemoveSystem = entry => {
+  if (
+    !window.confirm(
+      `Remove the "${systemLabel(entry.system)}" reading system? This deletes all word readings stored under it.`
+    )
+  ) {
+    return
+  }
+  emit('remove-transliteration-system', entry.id)
+  if (editingSystemId.value === entry.id) cancelEditSystem()
+}
 
 const timelineElement = ref(null)
 const timelineWidth = ref(0)

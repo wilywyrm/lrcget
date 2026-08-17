@@ -11,6 +11,79 @@ const createEmptySyncedLine = () => normalizeSyncedLine({})
 
 const MIN_WORD_DURATION_MS = 10
 
+// Key = UI label; value = BCP-47 tag persisted as the entry's `system`.
+export const TRANSLITERATION_PRESETS = {
+  Furigana: 'ja-Hrkt',
+  Romaji: 'ja-Latn',
+  Pinyin: 'zh-Latn-pinyin',
+  Zhuyin: 'zh-Bopo',
+  Romaja: 'ko-Latn',
+}
+
+// Internal lyricsfile keys (never transported) that key each word's
+// `transliteration` map. Collisions get a numeric suffix (base, base2, base3).
+const PRESET_ID_BASES = {
+  Furigana: 'hira',
+  Romaji: 'romaji',
+  Pinyin: 'pinyin',
+  Zhuyin: 'zhuyin',
+  Romaja: 'romaja',
+}
+
+const collapseEmptyMap = map =>
+  map && typeof map === 'object' && Object.keys(map).length > 0 ? map : undefined
+
+const rekeyMap = (map, oldId, newId) => {
+  if (!map || typeof map !== 'object' || !(oldId in map)) return map
+  const next = { ...map }
+  next[newId] = next[oldId]
+  delete next[oldId]
+  return collapseEmptyMap(next)
+}
+
+const deleteMapKey = (map, id) => {
+  if (!map || typeof map !== 'object' || !(id in map)) return map
+  const next = { ...map }
+  delete next[id]
+  return collapseEmptyMap(next)
+}
+
+const rekeyLineTransliteration = (line, oldId, newId) => ({
+  ...line,
+  transliteration: rekeyMap(line.transliteration, oldId, newId),
+  words: Array.isArray(line.words)
+    ? line.words.map(word => ({
+        ...word,
+        transliteration: rekeyMap(word.transliteration, oldId, newId),
+      }))
+    : line.words,
+})
+
+const deleteLineTransliteration = (line, id) => ({
+  ...line,
+  transliteration: deleteMapKey(line.transliteration, id),
+  words: Array.isArray(line.words)
+    ? line.words.map(word => ({
+        ...word,
+        transliteration: deleteMapKey(word.transliteration, id),
+      }))
+    : line.words,
+})
+
+export const deriveTransliterationId = (presetName, existingIds = []) => {
+  const slug = String(presetName ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '-')
+    .replace(/^-+|-+$/g, '')
+  const base = PRESET_ID_BASES[presetName] ?? (slug || 'system')
+
+  if (!existingIds.includes(base)) return base
+
+  let i = 2
+  while (existingIds.includes(`${base}${i}`)) i++
+  return `${base}${i}`
+}
+
 // The first word's start_ms is conceptually the same point as the line's
 // start_ms, so nudging line start drags word[0] with it. Then we cascade
 // forward: each successive word's start_ms must be at least
@@ -88,6 +161,85 @@ export function useEditLyricsV2Document({ audioSource, lyricsfile, trackId, prog
   const selectedSyncedLineIds = ref([])
   const isSyncedLineEditing = ref(false)
   const isInstrumental = ref(false)
+  const selectedTransliterationSystem = ref(null)
+
+  const declaredTransliterations = computed(
+    () => lyricsfileDocument.value?.metadata?.transliterations ?? []
+  )
+
+  const ensureMetadataTransliterations = () => {
+    if (!lyricsfileDocument.value) {
+      lyricsfileDocument.value = {}
+    }
+    if (!lyricsfileDocument.value.metadata) {
+      lyricsfileDocument.value.metadata = {}
+    }
+    if (!Array.isArray(lyricsfileDocument.value.metadata.transliterations)) {
+      lyricsfileDocument.value.metadata.transliterations = []
+    }
+    return lyricsfileDocument.value.metadata.transliterations
+  }
+
+  const addTransliterationSystem = (presetName, customSystem = null) => {
+    const isCustom = customSystem != null && customSystem !== ''
+    const system = isCustom ? customSystem : TRANSLITERATION_PRESETS[presetName]
+    if (!system) return null
+
+    const transliterations = ensureMetadataTransliterations()
+    const id = deriveTransliterationId(
+      isCustom ? customSystem : presetName,
+      transliterations.map(entry => entry.id)
+    )
+
+    const entry = { id, system }
+    transliterations.push(entry)
+    selectedTransliterationSystem.value = { ...entry }
+    isDirty.value = true
+    return entry
+  }
+
+  const editTransliterationSystem = (oldId, newSystem) => {
+    if (!newSystem) return null
+    const transliterations = ensureMetadataTransliterations()
+    const decl = transliterations.find(entry => entry.id === oldId)
+    if (!decl) return null
+
+    const newId = deriveTransliterationId(
+      newSystem,
+      transliterations.map(entry => entry.id).filter(id => id !== oldId)
+    )
+
+    decl.id = newId
+    decl.system = newSystem
+
+    if (newId !== oldId) {
+      syncedLines.value = syncedLines.value.map(line => {
+        const nextLine = rekeyLineTransliteration(line, oldId, newId)
+        return nextLine
+      })
+    }
+
+    if (selectedTransliterationSystem.value?.id === oldId) {
+      selectedTransliterationSystem.value = { id: newId, system: newSystem }
+    }
+    isDirty.value = true
+    return { id: newId, system: newSystem }
+  }
+
+  const removeTransliterationSystem = id => {
+    const transliterations = ensureMetadataTransliterations()
+    lyricsfileDocument.value.metadata.transliterations = transliterations.filter(
+      entry => entry.id !== id
+    )
+
+    syncedLines.value = syncedLines.value.map(line => deleteLineTransliteration(line, id))
+
+    if (selectedTransliterationSystem.value?.id === id) {
+      const remaining = lyricsfileDocument.value.metadata.transliterations
+      selectedTransliterationSystem.value = remaining.length > 0 ? { ...remaining[0] } : null
+    }
+    isDirty.value = true
+  }
 
   const selectedSyncedLineIndices = computed(() => {
     if (selectedSyncedLineIds.value.length === 0) return []
@@ -208,6 +360,9 @@ export function useEditLyricsV2Document({ audioSource, lyricsfile, trackId, prog
     console.log(lyricsfileDocument.value)
     isDirty.value = false
     isSyncedLineEditing.value = false
+    const declared = lyricsfileDocument.value?.metadata?.transliterations
+    selectedTransliterationSystem.value =
+      Array.isArray(declared) && declared.length > 0 ? { ...declared[0] } : null
     ensureSelectedSyncedLine()
   }
 
@@ -642,5 +797,10 @@ export function useEditLyricsV2Document({ audioSource, lyricsfile, trackId, prog
     updateLineWords,
     eraseWordTimings,
     setInstrumental,
+    selectedTransliterationSystem,
+    declaredTransliterations,
+    addTransliterationSystem,
+    editTransliterationSystem,
+    removeTransliterationSystem,
   }
 }

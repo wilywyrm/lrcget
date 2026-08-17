@@ -109,6 +109,13 @@
         :selected-line-indices="selectedSyncedLineIndices"
         :progress-ms="progressMs"
         :file-path="audioSource?.file_path ?? null"
+        :declared-transliterations="declaredTransliterations"
+        :selected-transliteration-system="selectedTransliterationSystem"
+        :document-language="lyricsfileDocument?.metadata?.language ?? null"
+        @update:selected-transliteration-system="selectedTransliterationSystem = $event"
+        @add-transliteration-system="addTransliterationSystem($event.presetName, $event.customSystem)"
+        @edit-transliteration-system="editTransliterationSystem($event.oldId, $event.newSystem)"
+        @remove-transliteration-system="removeTransliterationSystem($event)"
         @update:model-value="updateSyncedLines"
         @update:selected-line-index="selectSyncedLine"
         @update:selected-line-indices="handleUpdateSelectedLineIndices"
@@ -254,6 +261,11 @@ const {
   updateLineText,
   updateLineWords,
   setInstrumental,
+  selectedTransliterationSystem,
+  declaredTransliterations,
+  addTransliterationSystem,
+  editTransliterationSystem,
+  removeTransliterationSystem,
 } = useEditLyricsV2Document({
   audioSource: audioSourceRef,
   lyricsfile: lyricsfileRef,

@@ -8,12 +8,19 @@
       :all-lines="modelValue"
       :selected-line-index="selectedLineIndex"
       :file-path="filePath"
+      :declared-transliterations="declaredTransliterations"
+      :selected-transliteration-system="selectedTransliterationSystem"
+      :document-language="documentLanguage"
       @update:words="handleWordsUpdate"
       @word-timing-edited="handleWordTimingEdited"
       @play-line="handlePlayLine"
       @play-line-at-offset="handlePlayLineAtOffset"
       @select-next-line="selectLine"
       @seek="$emit('seek', $event)"
+      @update:selected-transliteration-system="$emit('update:selected-transliteration-system', $event)"
+      @add-transliteration-system="$emit('add-transliteration-system', $event)"
+      @edit-transliteration-system="$emit('edit-transliteration-system', $event)"
+      @remove-transliteration-system="$emit('remove-transliteration-system', $event)"
     />
 
     <div
@@ -166,6 +173,18 @@ const props = defineProps({
     type: String,
     default: null,
   },
+  declaredTransliterations: {
+    type: Array,
+    default: () => [],
+  },
+  selectedTransliterationSystem: {
+    type: Object,
+    default: null,
+  },
+  documentLanguage: {
+    type: String,
+    default: null,
+  },
 })
 
 const emit = defineEmits([
@@ -195,6 +214,10 @@ const emit = defineEmits([
   'update-line-text',
   'mark-as-instrumental',
   'seek',
+  'update:selected-transliteration-system',
+  'add-transliteration-system',
+  'edit-transliteration-system',
+  'remove-transliteration-system',
 ])
 
 // Effective end of a line for overlap detection: prefer the line's own end_ms,
