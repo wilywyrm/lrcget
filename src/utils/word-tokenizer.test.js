@@ -6,6 +6,8 @@ import {
   hasValidWords,
   ensureLineWords,
   getLineEndTime,
+  hasIdeographs,
+  needsTransliteration,
 } from './word-tokenizer.js'
 
 // ---------------------------------------------------------------------------
@@ -675,4 +677,42 @@ describe('ensureLineWords', () => {
     expect(result.words).toHaveLength(1)
     expect(result.words[0].text).toBe('hello')
   })
+})
+
+// ---------------------------------------------------------------------------
+// hasIdeographs
+// ---------------------------------------------------------------------------
+
+describe('hasIdeographs', () => {
+  it('detects kanji', () => expect(hasIdeographs('今日')).toBe(true))
+  it('detects mixed kanji+kana', () => expect(hasIdeographs('食べる')).toBe(true))
+  it('rejects pure hiragana', () => expect(hasIdeographs('こんにちは')).toBe(false))
+  it('rejects katakana', () => expect(hasIdeographs('コーヒー')).toBe(false))
+  it('rejects ASCII', () => expect(hasIdeographs('OK')).toBe(false))
+  it('rejects empty string', () => expect(hasIdeographs('')).toBe(false))
+  it('rejects null', () => expect(hasIdeographs(null)).toBe(false))
+  it('rejects undefined', () => expect(hasIdeographs(undefined)).toBe(false))
+  it('detects single kanji', () => expect(hasIdeographs('漢')).toBe(true))
+  it('detects kanji in mixed text', () => expect(hasIdeographs('hello世界')).toBe(true))
+})
+
+// ---------------------------------------------------------------------------
+// needsTransliteration
+// ---------------------------------------------------------------------------
+
+describe('needsTransliteration', () => {
+  it('true for kanji word without reading', () =>
+    expect(needsTransliteration({ text: '食べる' }, 'hira')).toBe(true))
+  it('false when reading exists', () =>
+    expect(needsTransliteration({ text: '食べる', transliteration: { hira: 'たべる' } }, 'hira')).toBe(false))
+  it('false for pure kana', () =>
+    expect(needsTransliteration({ text: 'は' }, 'hira')).toBe(false))
+  it('false for ASCII', () =>
+    expect(needsTransliteration({ text: 'OK' }, 'hira')).toBe(false))
+  it('false when transliteration object exists but systemId missing', () =>
+    expect(needsTransliteration({ text: '食べる', transliteration: { romaji: 'taberu' } }, 'hira')).toBe(true))
+  it('true for kanji with empty transliteration object', () =>
+    expect(needsTransliteration({ text: '食べる', transliteration: {} }, 'hira')).toBe(true))
+  it('false when transliteration is null', () =>
+    expect(needsTransliteration({ text: '食べる', transliteration: null }, 'hira')).toBe(true))
 })

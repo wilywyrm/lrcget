@@ -34,6 +34,36 @@ function isCJKBaseChar(char) {
   return isInRanges(char.charCodeAt(0), CJK_BASE_RANGES)
 }
 
+/**
+ * Returns true if text contains at least one CJK Unified Ideograph
+ * (kanji/hanzi). Does NOT flag kana, hangul, or ASCII.
+ * Ranges: CJK Unified (4E00–9FFF) + Extension A (3400–4DBF).
+ * @param {string} text - Text to check
+ * @returns {boolean}
+ */
+export function hasIdeographs(text) {
+  if (!text) return false
+  for (const char of text) {
+    const cp = char.codePointAt(0)
+    if ((cp >= 0x4e00 && cp <= 0x9fff) || (cp >= 0x3400 && cp <= 0x4dbf)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Returns true when a word segment contains kanji/hanzi AND lacks a
+ * transliteration reading for the given system id.
+ * @param {Object} word - Word object with text and optional transliteration
+ * @param {string} systemId - Transliteration system ID (e.g., 'hira', 'romaji')
+ * @returns {boolean}
+ */
+export function needsTransliteration(word, systemId) {
+  if (!hasIdeographs(word.text)) return false
+  return !(word.transliteration && word.transliteration[systemId])
+}
+
 // Opening punctuation that merges with the following CJK token
 const CJK_OPEN_PUNCT = new Set([
   '\u0028',
