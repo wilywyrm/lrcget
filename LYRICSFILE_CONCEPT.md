@@ -49,24 +49,27 @@ plain: |
 | `duration_ms`  | integer | No       | Total song length in milliseconds                   |
 | `offset_ms`    | integer | No       | Global timing offset in milliseconds (default: `0`) |
 | `language`     | string  | No       | ISO 639-1 language code                             |
-| `instrumental` | boolean | No       | `true` if song has no vocals (default: `false`)     |
+| `instrumental`       | boolean | No       | `true` if song has no vocals (default: `false`)                                                                                                  |
+| `transliterations`  | array   | No       | Declared transliteration systems. Each entry: `{id` (short mnemonic, e.g. `"hira"`), `system` (BCP-47 tag, e.g. `"ja-Hrkt"`)`}`. See §5 below. |
 
 ### Line Object
 
 | Field      | Type    | Required | Description                     |
 | ---------- | ------- | -------- | ------------------------------- |
-| `text`     | string  | Yes      | Full line text                  |
-| `start_ms` | integer | Yes      | Line start time in milliseconds |
-| `end_ms`   | integer | No       | Line end time in milliseconds   |
-| `words`    | array   | No       | Word-level sync array           |
+| `text`            | string  | Yes | Full line text                                                                                                                                                |
+| `start_ms`        | integer | Yes | Line start time in milliseconds                                                                                                                               |
+| `end_ms`          | integer | No  | Line end time in milliseconds                                                                                                                                 |
+| `words`           | array   | No  | Word-level sync array                                                                                                                                         |
+| `transliteration` | object  | No  | Keyed map `{<id>: <string>}`. Value is the transliteration of the whole line in that system. Should approximate the concatenation of word transliterations. |
 
 ### Word Object
 
 | Field      | Type    | Required | Description                                           |
 | ---------- | ------- | -------- | ----------------------------------------------------- |
-| `text`     | string  | Yes      | Word text including trailing space (except last word) |
-| `start_ms` | integer | Yes      | Word start time in milliseconds                       |
-| `end_ms`   | integer | No       | Word end time in milliseconds                         |
+| `text`            | string  | Yes | Word text including trailing space (except last word)                                                                                                    |
+| `start_ms`        | integer | Yes | Word start time in milliseconds                                                                                                                          |
+| `end_ms`          | integer | No  | Word end time in milliseconds                                                                                                                            |
+| `transliteration` | object  | No  | Keyed map `{<id>: <string>}`. Value is the transliteration of this word/segment in that system. Omit the key entirely when no reading exists for that word. |
 
 ---
 
@@ -219,6 +222,140 @@ _Note: Word objects include trailing spaces in `text` (except the last word) to 
 
 ---
 
+## 5. Keyed Multi-System Transliteration
+
+Transliteration is fully optional and additive. Old parsers that don't know about these fields ignore them; the format version stays `"1.0"`.
+
+### How it works
+
+Declare which transliteration systems the file uses in `metadata.transliterations`. Then attach readings inline at the line and/or word level using the same short `id` as a key.
+
+- **`metadata.transliterations`** — the declaration array. Each entry names a system once. Parsers use this to know which keys to expect.
+- **`line.transliteration`** — a keyed map giving the full-line reading in each system. Optional; omit when you only have word-level readings.
+- **`word.transliteration`** — a keyed map giving the per-word reading. Omit the key for a given system when that word has no reading to annotate (pure kana, punctuation, ASCII, etc.).
+
+### Conventions
+
+1. **Version stays `"1.0"`** — transliteration fields are additive and optional. Parsers that don't recognise them skip them safely.
+
+2. **`system` is a BCP-47 tag** — use `"ja-Hrkt"` for Japanese syllabaries (hiragana or katakana) and `"ja-Latn"` for romaji. Some servers (e.g. navidrome) lowercase tag values on the wire (`"ja-Hrkt"` → `"ja-hrkt"`). Consumers MUST compare `system` values case-insensitively.
+
+3. **Soft concatenation** — concatenating `word.transliteration[id]` values SHOULD approximate `line.transliteration[id]`. This mirrors the existing soft rule for `word.text` vs `line.text`: it's a guideline for consistency, not a hard constraint.
+
+4. **Avoid duplicate kana (affix-strip ruby rule)** — when rendering ruby annotations, show ruby ONLY over spans whose base text contains kanji/hanzi AND whose transliteration reading differs from the base. A pure-kana word (e.g. `は`) or a word whose base and reading are identical gets no ruby annotation. For okurigana like `食べる`, annotate only the kanji span (`食` → `た`), leaving the kana suffix `べる` bare.
+
+5. **Jukujikun MUST NOT be split** — a multi-kanji word with an irreducible reading (e.g. `今日` → `きょう`) MUST be kept as one word segment. Never split it across separate word entries to try to assign per-character readings.
+
+### Example 5a — Single system (furigana only)
+
+```yaml
+version: '1.0'
+metadata:
+  title: 'Song Title'
+  artist: 'Artist'
+  language: 'ja'
+  transliterations:
+    - id: hira
+      system: 'ja-Hrkt'
+lines:
+  - text: '今日は'
+    start_ms: 1000
+    end_ms: 3000
+    transliteration:
+      hira: 'きょうは'
+    words:
+      - text: '今日'
+        start_ms: 1000
+        end_ms: 2000
+        transliteration:
+          hira: 'きょう'
+      - text: 'は'
+        start_ms: 2000
+        end_ms: 3000
+plain: |
+  今日は
+```
+
+`は` has no `transliteration` key — it's pure kana, nothing to annotate. `今日` is a jukujikun and is kept as one segment.
+
+### Example 5b — Dual system (furigana + romaji)
+
+```yaml
+version: '1.0'
+metadata:
+  title: 'Bilingual Song'
+  artist: 'Artist'
+  language: 'ja'
+  transliterations:
+    - id: hira
+      system: 'ja-Hrkt'
+    - id: romaji
+      system: 'ja-Latn'
+lines:
+  - text: '大人になる'
+    start_ms: 1000
+    end_ms: 5000
+    transliteration:
+      hira: 'おとなになる'
+      romaji: 'otona ni naru'
+    words:
+      - text: '大人'
+        start_ms: 1000
+        end_ms: 2500
+        transliteration:
+          hira: 'おとな'
+          romaji: 'otona'
+      - text: 'に'
+        start_ms: 2500
+        end_ms: 3500
+        transliteration:
+          romaji: 'ni'
+      - text: 'なる'
+        start_ms: 3500
+        end_ms: 5000
+        transliteration:
+          romaji: 'naru'
+plain: |
+  大人になる
+```
+
+`に` and `なる` are kana — they carry no `hira` key (nothing to annotate in hiragana) but do carry a `romaji` key, since romaji covers kana too.
+
+### Example 5c — Sparse readings (only some words annotated)
+
+```yaml
+version: '1.0'
+metadata:
+  title: 'Mixed Song'
+  artist: 'Artist'
+  language: 'ja'
+  transliterations:
+    - id: hira
+      system: 'ja-Hrkt'
+lines:
+  - text: '空を飛ぶ'
+    start_ms: 0
+    end_ms: 3000
+    words:
+      - text: '空'
+        start_ms: 0
+        end_ms: 1000
+        transliteration:
+          hira: 'そら'
+      - text: 'を'
+        start_ms: 1000
+        end_ms: 1500
+      - text: '飛ぶ'
+        start_ms: 1500
+        end_ms: 3000
+plain: |
+  空を飛ぶ
+```
+
+Only `空` has a reading. `を` is kana — no key. `飛ぶ` is intentionally left unannotated here to show that sparse coverage is valid; a renderer simply skips words with no key for a given system.
+
+---
+
 ## Rules
 
 1. **Timing**: All timestamps are integers in milliseconds, monotonically increasing
@@ -228,3 +365,4 @@ _Note: Word objects include trailing spaces in `text` (except the last word) to 
 5. **Validation**: Concatenation of `word.text` should approximate `line.text`
 6. **Instrumental**: When `true`, both `lines` and `plain` should be empty or omitted
 7. **Plain field**: Uses literal block scalar (`|`) to preserve newlines and spacing exactly as written
+8. **Transliteration**: All transliteration fields are optional. Declared `id` values in `metadata.transliterations` MUST match the keys used in `line.transliteration` and `word.transliteration`. Compare `system` values case-insensitively. See §5 for full conventions.
