@@ -11,22 +11,10 @@
     @click="handleSegmentClick"
     @dblclick.stop="handleSegmentDoubleClick"
   >
-    <!-- Static ruby: quietly floats the stored reading above words that already
-         have one. Click it to open the inline editor. Rendered as a sibling of
-         the (overflow-hidden) base so its negative offset isn't clipped. -->
-    <div
-      v-if="showRubyStatic"
-      class="ruby-reading-static text-neutral-500 dark:text-neutral-400"
-      :title="`Reading: ${wordReading} — click to edit`"
-      @click.stop="activateEditor"
-      @mousedown.stop
-      @dblclick.stop
-    >
-      {{ wordReading }}
-    </div>
-
-    <!-- Active editor: a single reading field, only for the focused word,
-         floating just above the base text. -->
+    <!-- Active editor: a single reading field for the focused word. It floats
+         up into the lane's transliteration track (top: -1.75rem) so the input
+         visually occupies this word's slot in that track row. Stored readings
+         for non-active words are rendered by the lane's track, not here. -->
     <input
       v-if="isActiveWord"
       ref="readingInput"
@@ -426,12 +414,6 @@ const isActiveWord = computed(
   () => Boolean(activeSystem.value) && props.activeWordIndex === props.wordIndex
 )
 
-// Static ruby floats above words that already HAVE a reading — but never while
-// this word is being edited (the input replaces it).
-const showRubyStatic = computed(
-  () => Boolean(activeSystem.value && wordReading.value) && !isActiveWord.value
-)
-
 const segmentClass = computed(() => {
   const baseClasses = [
     'bg-neutral-200 dark:bg-neutral-700',
@@ -566,35 +548,21 @@ const handleSegmentLeave = () => {
   cursor: pointer;
 }
 
-/* Static ruby: quiet, non-interactive-looking reading that sits just above the
-   base word. Only words that already HAVE a reading render this. */
-.ruby-reading-static {
-  position: absolute;
-  top: -1.2em;
-  left: 0;
-  z-index: 30;
-  max-width: 12rem;
-  font-size: 0.65em;
-  line-height: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  cursor: pointer;
-}
-
-/* Active editor: a single reading field, only for the focused word, floating
-   just above the base text. */
+/* Active editor: a single reading field for the focused word. It floats up by
+   the transliteration-track height (1.75rem) so it sits inside that track row
+   in the lane, occupying this word's slot. */
 .ruby-reading-input {
   position: absolute;
-  top: -1.6em;
+  top: -1.75rem;
   left: 0;
   z-index: 40;
   width: 100%;
   min-width: 3.5rem;
-  padding: 0 2px;
+  height: 1.75rem;
+  padding: 0 4px;
   font-size: 0.65em;
-  line-height: 1.4;
-  border-radius: 3px;
+  line-height: 1.75rem;
+  border-radius: 0;
   outline: none;
 }
 </style>

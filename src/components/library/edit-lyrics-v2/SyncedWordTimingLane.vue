@@ -45,84 +45,6 @@
         </div>
 
         <div class="flex items-center gap-2">
-          <VDropdown
-            theme="lrcget-dropdown"
-            placement="bottom-end"
-            :shown="isPickerOpen"
-            @apply-show="openPicker"
-            @apply-hide="closePicker"
-          >
-            <button
-              class="button button-normal text-xs px-2 py-1 rounded flex items-center gap-1"
-              title="Add a transliteration reading system"
-              type="button"
-            >
-              <Plus class="w-3.5 h-3.5" />
-              <span>Add reading system</span>
-            </button>
-
-            <template #popper>
-              <div class="dropdown-container min-w-[13rem]">
-                <div class="dropdown-section-label">Add reading system</div>
-                <template v-if="!isCustomInput">
-                  <button
-                    v-for="presetName in orderedPresetNames"
-                    :key="presetName"
-                    v-close-popper
-                    class="dropdown-item"
-                    type="button"
-                    @click="choosePreset(presetName)"
-                  >
-                    <span class="dropdown-label">{{ presetName }}</span>
-                    <span class="ml-auto text-xs text-neutral-500 dark:text-neutral-400 font-mono">
-                      {{ TRANSLITERATION_PRESETS[presetName] }}
-                    </span>
-                  </button>
-                  <div class="dropdown-divider" />
-                  <button
-                    class="dropdown-item"
-                    type="button"
-                    @click="isCustomInput = true"
-                  >
-                    <span class="dropdown-label">Custom…</span>
-                  </button>
-                </template>
-
-                <div v-else class="px-2 py-2 flex flex-col gap-2">
-                  <label class="text-xs text-neutral-600 dark:text-neutral-400">
-                    BCP-47 locale tag
-                  </label>
-                  <input
-                    v-model="customSystemText"
-                    type="text"
-                    class="input px-3 h-8 w-full"
-                    placeholder="e.g. ja-Latn"
-                    @keydown.enter.prevent="submitCustomSystem"
-                  />
-                  <div class="flex justify-end gap-2">
-                    <button
-                      class="button button-normal px-3 h-7 rounded text-xs"
-                      type="button"
-                      @click="isCustomInput = false"
-                    >
-                      Back
-                    </button>
-                    <button
-                      v-close-popper
-                      class="button button-primary px-3 h-7 rounded text-xs"
-                      :class="{ 'button-disabled': !customSystemText.trim() }"
-                      :disabled="!customSystemText.trim()"
-                      type="button"
-                      @click="submitCustomSystem"
-                    >
-                      Add
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </template>
-          </VDropdown>
-
           <button
             v-if="filePath"
             class="button button-normal rounded-full h-6 w-6 flex items-center justify-center"
@@ -160,27 +82,35 @@
       </div>
 
       <div class="relative flex flex-col flex-1 min-h-0">
-      <div
-        v-if="showSystemDropdown"
-        class="flex items-center gap-2 mb-2 shrink-0"
-      >
-        <label class="text-xs text-neutral-600 dark:text-neutral-400">Reading</label>
-        <select
-          class="select select-xs"
-          :value="selectedTransliterationSystem?.id ?? ''"
-          @change="onSelectSystem"
+      <!-- Transliteration controls bar: always visible. Zero-system state shows
+           a placeholder + add button; ≥1-system state shows the active-system
+           select with inline re-tag (the select itself becomes an input),
+           remove, and add affordances. -->
+      <div class="flex items-center gap-2 mb-2 shrink-0">
+        <span
+          v-if="declaredSystems.length === 0"
+          class="text-xs text-neutral-500 dark:text-neutral-400 italic"
         >
-          <option
-            v-for="entry in declaredSystems"
-            :key="entry.id"
-            :value="entry.id"
-          >
-            {{ systemLabel(entry.system) }} ({{ entry.system }})
-          </option>
-        </select>
+          No transliteration
+        </span>
 
-        <template v-if="editingSystemId === selectedTransliterationSystem?.id && selectedTransliterationSystem">
+        <template v-else>
+          <select
+            v-if="!isEditingSystem"
+            class="select select-xs"
+            :value="selectedTransliterationSystem?.id ?? ''"
+            @change="onSelectSystem"
+          >
+            <option
+              v-for="entry in declaredSystems"
+              :key="entry.id"
+              :value="entry.id"
+            >
+              {{ systemLabel(entry.system) }} ({{ entry.system }})
+            </option>
+          </select>
           <input
+            v-else
             v-model="editingSystemText"
             type="text"
             class="input px-3 h-7 w-[10rem]"
@@ -188,34 +118,39 @@
             @keydown.enter.prevent="confirmEditSystem"
             @keydown.esc.prevent="cancelEditSystem"
           />
+
           <button
-            class="button button-primary rounded h-7 w-7 flex items-center justify-center"
-            title="Confirm re-tag"
-            type="button"
-            @click="confirmEditSystem"
-          >
-            <Check class="w-3.5 h-3.5" />
-          </button>
-          <button
-            class="button button-normal rounded h-7 w-7 flex items-center justify-center"
-            title="Cancel"
-            type="button"
-            @click="cancelEditSystem"
-          >
-            <Close class="w-3.5 h-3.5" />
-          </button>
-        </template>
-        <template v-else-if="selectedTransliterationSystem">
-          <button
-            class="button button-normal rounded h-7 w-7 flex items-center justify-center"
+            v-if="!isEditingSystem && selectedTransliterationSystem"
+            class="button button-normal rounded h-6 w-6 flex items-center justify-center"
             title="Edit reading system locale"
             type="button"
             @click="startEditSystem(selectedTransliterationSystem)"
           >
             <Pencil class="w-3.5 h-3.5" />
           </button>
+
+          <template v-if="isEditingSystem">
+            <button
+              class="button button-primary rounded h-6 w-6 flex items-center justify-center"
+              title="Confirm re-tag"
+              type="button"
+              @click="confirmEditSystem"
+            >
+              <Check class="w-3.5 h-3.5" />
+            </button>
+            <button
+              class="button button-normal rounded h-6 w-6 flex items-center justify-center"
+              title="Cancel"
+              type="button"
+              @click="cancelEditSystem"
+            >
+              <Close class="w-3.5 h-3.5" />
+            </button>
+          </template>
+
           <button
-            class="button button-normal rounded h-7 w-7 flex items-center justify-center"
+            v-if="!isEditingSystem && selectedTransliterationSystem"
+            class="button button-normal rounded h-6 w-6 flex items-center justify-center"
             title="Remove reading system"
             type="button"
             @click="confirmRemoveSystem(selectedTransliterationSystem)"
@@ -223,6 +158,83 @@
             <Trash class="w-3.5 h-3.5" />
           </button>
         </template>
+
+        <VDropdown
+          theme="lrcget-dropdown"
+          placement="bottom-end"
+          :shown="isPickerOpen"
+          @apply-show="openPicker"
+          @apply-hide="closePicker"
+        >
+          <button
+            class="button button-normal rounded h-6 w-6 flex items-center justify-center"
+            title="Add reading system"
+            type="button"
+          >
+            <Plus class="w-3.5 h-3.5" />
+          </button>
+
+          <template #popper>
+            <div class="dropdown-container min-w-[13rem]">
+              <div class="dropdown-section-label">Add reading system</div>
+              <template v-if="!isCustomInput">
+                <button
+                  v-for="presetName in orderedPresetNames"
+                  :key="presetName"
+                  v-close-popper
+                  class="dropdown-item"
+                  type="button"
+                  @click="choosePreset(presetName)"
+                >
+                  <span class="dropdown-label">{{ presetName }}</span>
+                  <span class="ml-auto text-xs text-neutral-500 dark:text-neutral-400 font-mono">
+                    {{ TRANSLITERATION_PRESETS[presetName] }}
+                  </span>
+                </button>
+                <div class="dropdown-divider" />
+                <button
+                  class="dropdown-item"
+                  type="button"
+                  @click="isCustomInput = true"
+                >
+                  <span class="dropdown-label">Custom…</span>
+                </button>
+              </template>
+
+              <div v-else class="px-2 py-2 flex flex-col gap-2">
+                <label class="text-xs text-neutral-600 dark:text-neutral-400">
+                  BCP-47 locale tag
+                </label>
+                <input
+                  v-model="customSystemText"
+                  type="text"
+                  class="input px-3 h-8 w-full"
+                  placeholder="e.g. ja-Latn"
+                  @keydown.enter.prevent="submitCustomSystem"
+                />
+                <div class="flex justify-end gap-2">
+                  <button
+                    class="button button-normal px-3 h-7 rounded text-xs"
+                    type="button"
+                    @click="isCustomInput = false"
+                  >
+                    Back
+                  </button>
+                  <button
+                    v-close-popper
+                    class="button button-primary px-3 h-7 rounded text-xs"
+                    :class="{ 'button-disabled': !customSystemText.trim() }"
+                    :disabled="!customSystemText.trim()"
+                    type="button"
+                    @click="submitCustomSystem"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+            </div>
+          </template>
+        </VDropdown>
       </div>
 
       <SpectrogramPanel
@@ -233,6 +245,37 @@
         class="mb-2 shrink-0"
         @seek="$emit('seek', $event)"
       />
+
+      <!-- Transliteration track: a separate row above the main timing track,
+           on the same horizontal scale. Shows each word's reading under the
+           active system, and continues the word-boundary lines upward (faint)
+           so the track and timeline read as one connected surface. -->
+      <div
+        v-if="selectedTransliterationSystem"
+        class="relative shrink-0 bg-neutral-50 dark:bg-neutral-900 border border-b-0 border-neutral-300 dark:border-neutral-600 rounded-t overflow-hidden"
+        style="height: 1.75rem;"
+      >
+        <template
+          v-for="(word, index) in displayedWords"
+          :key="`translit-${index}`"
+        >
+          <div
+            v-if="getWordReading(word)"
+            class="absolute flex items-center justify-center px-0.5 overflow-hidden text-neutral-500 dark:text-neutral-400"
+            :style="getWordSegmentStyle(index)"
+            style="top: 0; bottom: 0; font-size: 0.65em;"
+          >
+            <span class="truncate">{{ getWordReading(word) }}</span>
+          </div>
+        </template>
+
+        <div
+          v-for="index in boundaryIndexes"
+          :key="`translit-boundary-${index}`"
+          class="absolute top-0 bottom-0 w-px -translate-x-1/2 pointer-events-none bg-neutral-300/40 dark:bg-hoa-1000/40"
+          :style="{ left: `${timeToPercent(displayedWords[index].start_ms)}%` }"
+        />
+      </div>
 
       <!-- Timeline with word segments -->
       <div
@@ -425,8 +468,6 @@ const LANGUAGE_PRESET_PRIORITY = {
 
 const declaredSystems = computed(() => props.declaredTransliterations ?? [])
 
-const showSystemDropdown = computed(() => declaredSystems.value.length >= 2)
-
 const systemLabel = system => {
   const preset = PRESET_NAMES.find(name => TRANSLITERATION_PRESETS[name] === system)
   return preset || system
@@ -475,6 +516,11 @@ const onSelectSystem = event => {
 
 const editingSystemId = ref(null)
 const editingSystemText = ref('')
+
+// True while the inline system re-tag editor is open: the controls bar swaps
+// the active-system <select> for an <input>, hiding the pencil/trash in favor
+// of confirm/cancel.
+const isEditingSystem = computed(() => editingSystemId.value !== null)
 
 const startEditSystem = entry => {
   editingSystemId.value = entry.id
@@ -562,10 +608,13 @@ const hasSpectrogramSlot = computed(
 
 // Three-way lane height so collapsing the spectrogram doesn't squash the
 // word-timing timeline: tall with spectrogram, mid-tall in word-sync without
-// spectrogram (preserves timeline size), compact otherwise.
+// spectrogram (preserves timeline size), compact otherwise. When a reading
+// system is active, add ~1.75rem for the transliteration track row that sits
+// above the timeline.
 const laneHeightClass = computed(() => {
-  if (hasSpectrogramSlot.value) return 'h-[13rem]'
-  if (isWordSyncAvailable.value) return 'h-[7rem]'
+  const hasTransliteration = !!props.selectedTransliterationSystem
+  if (hasSpectrogramSlot.value) return hasTransliteration ? 'h-[14.75rem]' : 'h-[13rem]'
+  if (isWordSyncAvailable.value) return hasTransliteration ? 'h-[8.75rem]' : 'h-[7rem]'
   return 'h-[5rem]'
 })
 
@@ -709,6 +758,29 @@ const getWordEndMs = index => {
 
   const nextWordStart = displayedWords.value[index + 1]?.start_ms
   return Number.isFinite(nextWordStart) ? nextWordStart : laneEndMs.value
+}
+
+// --- Transliteration track (reading row above the timeline) ------------------
+
+// This word's stored reading under the active system, or '' when none/absent.
+const getWordReading = word => {
+  const system = props.selectedTransliterationSystem
+  if (!system) return ''
+  return word?.transliteration?.[system.id] || ''
+}
+
+// Horizontal placement (left/width %) of a word's slot in the transliteration
+// track. Mirrors SyncedWordTimingSegment's segmentStyle math so each reading
+// label lines up exactly above its word segment.
+const getWordSegmentStyle = index => {
+  if (!props.timelineWidth || laneEndMs.value <= laneStartMs.value) return {}
+  const word = displayedWords.value[index]
+  if (!word) return {}
+  const duration = laneEndMs.value - laneStartMs.value
+  const leftPercent = ((word.start_ms - laneStartMs.value) / duration) * 100
+  const endMs = getWordEndMs(index)
+  const widthPercent = (Math.max(0, endMs - word.start_ms) / duration) * 100
+  return { left: `${leftPercent}%`, width: `${widthPercent}%` }
 }
 
 const handleBoundaryPointerDown = (rightWordIndex, event) => {
