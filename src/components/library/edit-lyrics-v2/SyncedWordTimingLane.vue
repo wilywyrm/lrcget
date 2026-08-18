@@ -237,6 +237,10 @@
         </VDropdown>
       </div>
 
+      <!-- Sub-wrapper: spectrograph + transliteration track + timeline.
+           The playhead is absolute within this so it never overlaps the
+           controls bar above. -->
+      <div class="relative flex flex-col flex-1 min-h-0">
       <SpectrogramPanel
         v-if="filePath && spectrogramVisible"
         :file-path="filePath"
@@ -355,9 +359,9 @@
 
       </div>
 
-      <!-- Playhead is a sibling of the spectrogram + timeline so its top
-           sits just above the spectrogram (when visible) instead of just
-           above the timeline. -->
+      <!-- Playhead spans the spectrograph + transliteration track + timeline
+           only — it is inside the sub-wrapper so it never overlaps the
+           controls bar above. -->
       <div
         v-if="progressMs >= lineStartMs && progressMs <= laneEndMs"
         class="absolute -top-1 bottom-0 w-px bg-neutral-400 dark:bg-neutral-400 z-20 pointer-events-none"
@@ -367,7 +371,8 @@
           class="absolute -top-1 -left-[3px] w-0 h-0 border-l-[4px] border-r-[4px] border-t-[6px] border-l-transparent border-r-transparent border-t-neutral-400 dark:border-t-neutral-400"
         />
       </div>
-      </div>
+      </div><!-- end sub-wrapper -->
+      </div><!-- end outer wrapper -->
     </template>
   </div>
 </template>
