@@ -251,23 +251,23 @@
            active system, and continues the word-boundary lines upward (faint)
            so the track and timeline read as one connected surface. -->
       <div
-        v-if="selectedTransliterationSystem"
-        class="relative shrink-0 bg-neutral-50 dark:bg-neutral-900 border border-b-0 border-neutral-300 dark:border-neutral-600 rounded-t overflow-hidden"
-        style="height: 1.75rem;"
-      >
-        <template
-          v-for="(word, index) in displayedWords"
-          :key="`translit-${index}`"
-        >
-          <div
-            v-if="getWordReading(word)"
-            class="absolute flex items-center justify-center px-0.5 overflow-hidden text-neutral-500 dark:text-neutral-400"
-            :style="getWordSegmentStyle(index)"
-            style="top: 0; bottom: 0; font-size: 0.65em;"
-          >
-            <span class="truncate">{{ getWordReading(word) }}</span>
-          </div>
-        </template>
+         v-if="selectedTransliterationSystem"
+         class="relative shrink-0 bg-neutral-50 dark:bg-neutral-900 border-t border-x-0 border-neutral-300 dark:border-neutral-600 rounded-t overflow-hidden"
+         style="height: 1.75rem;"
+       >
+         <template
+           v-for="(word, index) in displayedWords"
+           :key="`translit-${index}`"
+         >
+           <div
+             class="absolute flex items-center justify-center px-0.5 overflow-hidden text-neutral-500 dark:text-neutral-400 cursor-pointer"
+             :style="getWordSegmentStyle(index)"
+             style="top: 0; bottom: 0; font-size: 0.65em;"
+             @click.stop="handleActivateEditor(index)"
+           >
+             <span class="truncate">{{ getWordReading(word) }}</span>
+           </div>
+         </template>
 
         <div
           v-for="index in boundaryIndexes"
@@ -1067,6 +1067,23 @@ watch(
     nextTick(() => {
       updateTimelineWidth()
     })
+  },
+  { immediate: true }
+)
+
+// When declared systems become available but nothing is selected yet, auto-select
+// the first one. This covers the case where a lyricsfile with transliterations
+// is opened and the parent hasn't propagated the initial selection yet.
+watch(
+  () => props.declaredTransliterations,
+  declared => {
+    if (
+      Array.isArray(declared) &&
+      declared.length > 0 &&
+      !props.selectedTransliterationSystem
+    ) {
+      emit('update:selected-transliteration-system', { ...declared[0] })
+    }
   },
   { immediate: true }
 )
