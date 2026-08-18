@@ -613,9 +613,12 @@ const hasSpectrogramSlot = computed(
 // above the timeline.
 const laneHeightClass = computed(() => {
   const hasTransliteration = !!props.selectedTransliterationSystem
-  if (hasSpectrogramSlot.value) return hasTransliteration ? 'h-[14.75rem]' : 'h-[13rem]'
-  if (isWordSyncAvailable.value) return hasTransliteration ? 'h-[8.75rem]' : 'h-[7rem]'
-  return 'h-[5rem]'
+  // Base heights are increased by ~2rem vs the old values to account for the
+  // always-visible controls bar (h-7 + mb-2). The transliteration track adds
+  // a further 1.75rem when a reading system is active.
+  if (hasSpectrogramSlot.value) return hasTransliteration ? 'h-[16.75rem]' : 'h-[15rem]'
+  if (isWordSyncAvailable.value) return hasTransliteration ? 'h-[10.75rem]' : 'h-[9rem]'
+  return 'h-[7rem]'
 })
 
 // Check if the line has actual saved words (not auto-generated)
