@@ -776,7 +776,7 @@ const getWordReading = word => {
 // track. Mirrors SyncedWordTimingSegment's segmentStyle math so each reading
 // label lines up exactly above its word segment.
 const getWordSegmentStyle = index => {
-  if (!props.timelineWidth || laneEndMs.value <= laneStartMs.value) return {}
+  if (!timelineWidth.value || laneEndMs.value <= laneStartMs.value) return {}
   const word = displayedWords.value[index]
   if (!word) return {}
   const duration = laneEndMs.value - laneStartMs.value
