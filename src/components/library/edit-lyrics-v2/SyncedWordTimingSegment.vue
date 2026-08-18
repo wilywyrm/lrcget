@@ -562,6 +562,7 @@ const handleSegmentLeave = () => {
   padding: 0 4px;
   font-size: 0.65em;
   line-height: 1.75rem;
+  text-align: center;
   border-radius: 0;
   outline: none;
 }
