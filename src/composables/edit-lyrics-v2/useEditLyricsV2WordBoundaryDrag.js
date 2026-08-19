@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue'
+import { mergeWordTransliteration } from '@/utils/lyricsfile.js'
 
 const DRAG_THRESHOLD = 3
 
@@ -401,10 +402,18 @@ export function useEditLyricsV2WordBoundaryDrag({
       const word = words.value[index]
 
       if (index > 0 && deletedSet.has(index) && mergedWords.length > 0) {
-        mergedWords[mergedWords.length - 1] = {
-          ...mergedWords[mergedWords.length - 1],
-          text: `${mergedWords[mergedWords.length - 1].text || ''}${word.text || ''}`,
+        const accWord = mergedWords[mergedWords.length - 1]
+        const mergedTransliteration = mergeWordTransliteration(accWord, word)
+        const nextWord = {
+          ...accWord,
+          text: `${accWord.text || ''}${word.text || ''}`,
         }
+        if (Object.keys(mergedTransliteration).length > 0) {
+          nextWord.transliteration = mergedTransliteration
+        } else {
+          delete nextWord.transliteration
+        }
+        mergedWords[mergedWords.length - 1] = nextWord
         continue
       }
 

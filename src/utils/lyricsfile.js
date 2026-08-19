@@ -273,6 +273,66 @@ const nonEmptyTransliteration = map => {
   return Object.keys(map).length > 0 ? { ...map } : undefined
 }
 
+// Split a word's transliteration across a segment boundary, returning the LEFT
+// segment's reading map (the right segment starts empty). Boundaries are shared
+// across every system, so every system present is handled at once. Per system:
+// when the right segment text is exactly a trailing run of the reading
+// (Japanese okurigana, e.g. べる in 食べる/たべる), that shared suffix is dropped so
+// the left kanji keeps only its own reading (食/た); other scripts (romaji) never
+// match, so their reading copies to the left in full.
+export const splitWordTransliteration = (transliteration, rightText) => {
+  const source =
+    transliteration && typeof transliteration === 'object' ? transliteration : {}
+  const left = {}
+
+  for (const [systemId, reading] of Object.entries(source)) {
+    if (typeof reading !== 'string' || reading === '') {
+      continue
+    }
+
+    let leftReading = reading
+    if (rightText && reading.endsWith(rightText)) {
+      leftReading = reading.slice(0, reading.length - rightText.length)
+    }
+
+    if (leftReading) {
+      left[systemId] = leftReading
+    }
+  }
+
+  return left
+}
+
+// Merge two adjacent segments' transliteration into the concatenated word's
+// reading map (inverse of split). Per system, a segment lacking a reading
+// contributes its own text (kana reads as itself), so 食(た)+べる(∅) recovers
+// たべる. A system where neither side carries a reading stays unannotated.
+export const mergeWordTransliteration = (accWord, nextWord) => {
+  const accMap =
+    accWord?.transliteration && typeof accWord.transliteration === 'object'
+      ? accWord.transliteration
+      : {}
+  const nextMap =
+    nextWord?.transliteration && typeof nextWord.transliteration === 'object'
+      ? nextWord.transliteration
+      : {}
+
+  const merged = {}
+  for (const systemId of new Set([...Object.keys(accMap), ...Object.keys(nextMap)])) {
+    const accReading = accMap[systemId]
+    const nextReading = nextMap[systemId]
+    if (!accReading && !nextReading) {
+      continue
+    }
+
+    const accPart = accReading || accWord?.text || ''
+    const nextPart = nextReading || nextWord?.text || ''
+    merged[systemId] = `${accPart}${nextPart}`
+  }
+
+  return merged
+}
+
 const toPersistableWord = word => {
   const copy = { ...word }
   const transliteration = nonEmptyTransliteration(copy.transliteration)

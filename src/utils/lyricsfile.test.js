@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { parseLyricsfile, serializeLyricsfile } from './lyricsfile.js'
+import {
+  parseLyricsfile,
+  serializeLyricsfile,
+  splitWordTransliteration,
+  mergeWordTransliteration,
+} from './lyricsfile.js'
 
 const KEYED_TRANSLITERATION_FIXTURE = `version: '1.0'
 metadata:
@@ -169,5 +174,58 @@ describe('lyricsfile keyed transliteration', () => {
     const reparsed = parseLyricsfile(serialized)
     expect(reparsed.syncedLines[0].transliteration).toEqual({ hira: 'きょう' })
     expect(reparsed.syncedLines[0].words[0].transliteration).toEqual({ hira: 'きょう' })
+  })
+})
+
+describe('splitWordTransliteration', () => {
+  it('copies the full reading to the left when the right text is not a reading suffix', () => {
+    expect(splitWordTransliteration({ hira: 'おとな' }, '人')).toEqual({ hira: 'おとな' })
+  })
+
+  it('strips the shared suffix when the right text ends the reading (okurigana)', () => {
+    expect(splitWordTransliteration({ hira: 'たべる' }, 'べる')).toEqual({ hira: 'た' })
+  })
+
+  it('applies the suffix strip per system (kana strips, romaji copies full)', () => {
+    expect(splitWordTransliteration({ hira: 'たべる', romaji: 'taberu' }, 'べる')).toEqual({
+      hira: 'た',
+      romaji: 'taberu',
+    })
+  })
+
+  it('omits a system whose reading equals the right text (nothing left for the left)', () => {
+    expect(splitWordTransliteration({ hira: 'べる' }, 'べる')).toEqual({})
+  })
+
+  it('returns an empty map for missing or empty transliteration', () => {
+    expect(splitWordTransliteration(undefined, 'べる')).toEqual({})
+    expect(splitWordTransliteration({ hira: '' }, 'べる')).toEqual({})
+  })
+})
+
+describe('mergeWordTransliteration', () => {
+  it('recovers okurigana by falling back to a reading-less segment text', () => {
+    expect(
+      mergeWordTransliteration({ text: '食', transliteration: { hira: 'た' } }, { text: 'べる' })
+    ).toEqual({ hira: 'たべる' })
+  })
+
+  it('concatenates two annotated segments per system', () => {
+    expect(
+      mergeWordTransliteration(
+        { text: '大', transliteration: { hira: 'おお' } },
+        { text: '人', transliteration: { hira: 'とな' } }
+      )
+    ).toEqual({ hira: 'おおとな' })
+  })
+
+  it('falls back to the accumulator text when only the next segment is annotated', () => {
+    expect(
+      mergeWordTransliteration({ text: 'の' }, { text: '人', transliteration: { hira: 'ひと' } })
+    ).toEqual({ hira: 'のひと' })
+  })
+
+  it('leaves a system unannotated when neither segment carries a reading', () => {
+    expect(mergeWordTransliteration({ text: 'べ' }, { text: 'る' })).toEqual({})
   })
 })

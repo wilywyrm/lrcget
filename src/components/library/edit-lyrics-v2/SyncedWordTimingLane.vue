@@ -399,7 +399,7 @@ import {
   wordTimingShortcutBindings,
   withShortcutTitle,
 } from '@/composables/edit-lyrics-v2/shortcutRegistry.js'
-import { formatTimestampMs } from '@/utils/lyricsfile.js'
+import { formatTimestampMs, splitWordTransliteration } from '@/utils/lyricsfile.js'
 import { TRANSLITERATION_PRESETS } from '@/composables/edit-lyrics-v2/useEditLyricsV2Document.js'
 import {
   ensureLineWords,
@@ -894,9 +894,15 @@ const handleSegmentSplitAt = ({ wordIndex, splitIndex, splitRatio }) => {
     Math.min(wordEndMs - 1, Math.round(wordStartMs + (wordEndMs - wordStartMs) * normalizedSplitRatio))
   )
 
+  const leftTransliteration = splitWordTransliteration(currentWord?.transliteration, rightText)
+  const leftWord = { text: leftText, start_ms: wordStartMs }
+  if (Object.keys(leftTransliteration).length > 0) {
+    leftWord.transliteration = leftTransliteration
+  }
+
   const updatedWords = [
     ...displayedWords.value.slice(0, wordIndex),
-    { text: leftText, start_ms: wordStartMs },
+    leftWord,
     { text: rightText, start_ms: splitTimeMs },
     ...displayedWords.value.slice(wordIndex + 1),
   ]
