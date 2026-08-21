@@ -193,6 +193,7 @@ import SpectrogramPanel from '@/components/library/edit-lyrics-v2/SpectrogramPan
 import SyncedWordTimingSegment from '@/components/library/edit-lyrics-v2/SyncedWordTimingSegment.vue'
 import { useEditLyricsV2WordBoundaryDrag } from '@/composables/edit-lyrics-v2/useEditLyricsV2WordBoundaryDrag.js'
 import { useEditLyricsV2WordTimingHotkeys } from '@/composables/edit-lyrics-v2/useEditLyricsV2WordTimingHotkeys.js'
+import { resolveWordSplitTimeMs } from '@/utils/word-split.js'
 import {
   syncedEditorShortcutBindings,
   wordTimingShortcutBindings,
@@ -493,7 +494,7 @@ const handleDeleteSelectedBoundaries = () => {
   deleteSelectedBoundaries()
 }
 
-const handleSegmentSplitAt = ({ wordIndex, splitIndex, splitRatio }) => {
+const handleSegmentSplitAt = ({ wordIndex, splitIndex, splitRatio, splitClientX }) => {
   if (!isWordSyncAvailable.value) {
     return
   }
@@ -521,10 +522,20 @@ const handleSegmentSplitAt = ({ wordIndex, splitIndex, splitRatio }) => {
   const normalizedSplitRatio = Number.isFinite(splitRatio)
     ? Math.max(0, Math.min(1, splitRatio))
     : normalizedSplitIndex / graphemes.length
-  const splitTimeMs = Math.max(
-    wordStartMs + 1,
-    Math.min(wordEndMs - 1, Math.round(wordStartMs + (wordEndMs - wordStartMs) * normalizedSplitRatio))
-  )
+  // Prefer the highlighted divider's actual position on the lane: map its
+  // client-X through the timeline's time scale so the split lands under the
+  // highlight the user clicked. This avoids the trailing-space failure where a
+  // zero-width trailing space drives the width ratio to ~1.0 and pins the new
+  // segment onto the word's end bound (a zero-length segment). Fall back to the
+  // width ratio when no client-X is available (non-text-node measurement path).
+  const ratioTimeMs = Math.round(wordStartMs + (wordEndMs - wordStartMs) * normalizedSplitRatio)
+  const highlightTimeMs = Number.isFinite(splitClientX) ? clientXToTime(splitClientX) : null
+  const splitTimeMs = resolveWordSplitTimeMs({
+    wordStartMs,
+    wordEndMs,
+    highlightTimeMs,
+    ratioTimeMs,
+  })
 
   const updatedWords = [
     ...displayedWords.value.slice(0, wordIndex),
