@@ -309,6 +309,7 @@ const getSplitPreview = clientX => {
         splitIndex: index,
         measuredWidth: Math.max(0, boundaryClientX - textRect.left),
         splitX: boundaryClientX - previewContainerRect.left,
+        splitClientX: boundaryClientX,
       })
     }
 
@@ -330,6 +331,7 @@ const getSplitPreview = clientX => {
         splitIndex: nearestBoundary.splitIndex,
         splitRatio,
         splitX: nearestBoundary.splitX,
+        splitClientX: nearestBoundary.splitClientX,
       }
     }
   }
@@ -374,6 +376,7 @@ const getSplitPreview = clientX => {
     splitIndex: nearestBoundary.splitIndex,
     splitRatio: nearestBoundary.measuredWidth / totalMeasuredWidth,
     splitX,
+    splitClientX: previewContainerRect.left + splitX,
   }
 }
 
@@ -470,6 +473,7 @@ const handleSegmentDoubleClick = event => {
     wordIndex: props.wordIndex,
     splitIndex: splitPreview.splitIndex,
     splitRatio: splitPreview.splitRatio,
+    splitClientX: splitPreview.splitClientX,
   })
 }
 
