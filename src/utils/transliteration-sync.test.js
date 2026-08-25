@@ -223,6 +223,22 @@ describe('isLineOutOfSync', () => {
     }
     expect(isLineOutOfSync(line, 'hira')).toBe(false)
   })
+
+  it('is true for a furigana line when a kanji cue reading diverges from the line', () => {
+    const line = {
+      words: [cue('大人', 'hira', 'こども'), cue('に'), cue('なる', 'hira', 'なる')],
+      transliteration: { hira: 'おとなになる' },
+    }
+    expect(isLineOutOfSync(line, 'hira')).toBe(true)
+  })
+
+  it('is true for a furigana line with an unread kanji cue (cannot reconstruct)', () => {
+    const line = {
+      words: [cue('大人'), cue('に'), cue('なる', 'hira', 'なる')],
+      transliteration: { hira: 'おとなになる' },
+    }
+    expect(isLineOutOfSync(line, 'hira')).toBe(true)
+  })
 })
 
 // ---------------------------------------------------------------------------

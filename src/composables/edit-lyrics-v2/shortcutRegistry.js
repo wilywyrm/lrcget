@@ -364,6 +364,11 @@ export const wordTimingShortcutBindings = [
     description: 'Reset separator cursor to second divider',
   }),
   createShortcutBinding({
+    id: 'clearSeparatorSelection',
+    defaultKeys: ['Escape'],
+    description: 'Clear separator selection',
+  }),
+  createShortcutBinding({
     id: 'deleteSelectedSeparators',
     defaultKeys: ['Delete'],
     description: 'Delete selected separators to merge adjacent words',

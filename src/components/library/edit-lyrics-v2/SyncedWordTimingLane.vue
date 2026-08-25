@@ -362,9 +362,9 @@
       <!-- Line-level transliteration lane: one full-width editable field for
            the whole-line reading under the active system, sitting directly
            below the timeline as a sibling surface. Spacing is preserved
-           verbatim. Shows an amber out-of-sync warning (romanization systems
-           only) when the line-level reading diverges from the cue concat, plus
-           an explicit "Generate from cues" rebuild. -->
+           verbatim. Shows an amber out-of-sync warning when the line-level
+           reading diverges from the cue concat (any system), plus an explicit
+           "Generate from cues" rebuild. -->
       <div
         v-if="selectedTransliterationSystem"
         class="relative shrink-0 mt-1 flex items-center gap-2 px-2 rounded-b overflow-hidden"
@@ -392,6 +392,12 @@
           placeholder="No line-level reading — edit or Generate from cues"
           @input="handleLineTransliterationInput"
         />
+        <span
+          v-if="showLineSyncWarning"
+          class="shrink-0 whitespace-nowrap text-[0.65rem] text-amber-700 dark:text-amber-300"
+        >
+          line-level transliteration does not match cue-level values
+        </span>
         <button
           class="button button-normal shrink-0 rounded px-2 py-0.5 text-[0.65rem]"
           title="Generate line-level reading from the cue readings"
@@ -445,7 +451,7 @@ import {
   withShortcutTitle,
 } from '@/composables/edit-lyrics-v2/shortcutRegistry.js'
 import { formatTimestampMs, splitWordTransliteration } from '@/utils/lyricsfile.js'
-import { isLineOutOfSync, isRomanizationSystem } from '@/utils/transliteration-sync.js'
+import { isLineOutOfSync } from '@/utils/transliteration-sync.js'
 import { TRANSLITERATION_PRESETS } from '@/composables/edit-lyrics-v2/useEditLyricsV2Document.js'
 import {
   ensureLineWords,
@@ -750,6 +756,7 @@ const {
   syncSelectedBoundary,
   deleteSelectedBoundaries,
   resetBoundarySelection,
+  clearBoundarySelection,
   cancelBoundaryInteraction,
 } = useEditLyricsV2WordBoundaryDrag({
   isWordSyncAvailable,
@@ -850,13 +857,14 @@ const lineLevelReading = computed(() => {
   return props.selectedLine?.transliteration?.[system.id] ?? ''
 })
 
-// Amber warning: the line-level reading diverges (beyond whitespace) from the
-// cue concatenation. Only meaningful for romanization systems, whose line-level
-// values carry inter-word spaces the cues can't represent.
+// Amber warning when the line-level reading diverges (beyond whitespace) from
+// the cue readings, for ANY active system. Furigana reconstructs too: a kana
+// cue reads as itself and a kanji cue as its stored reading, so concatenating
+// the cue readings yields the line reading (see effectiveReading).
 const showLineSyncWarning = computed(() => {
   const system = props.selectedTransliterationSystem
   if (!system) return false
-  return isRomanizationSystem(system.system) && isLineOutOfSync(props.selectedLine, system.id)
+  return isLineOutOfSync(props.selectedLine, system.id)
 })
 
 // Verbatim direct edit of the line-level reading — no trim, so user spacing is
@@ -1154,6 +1162,7 @@ const { bindWordTimingHotkeys, unbindWordTimingHotkeys } = useEditLyricsV2WordTi
   selectPreviousBoundary: () => selectPreviousBoundary(),
   selectNextBoundary: () => selectNextBoundary(),
   resetBoundarySelection: () => resetBoundarySelection(),
+  clearBoundarySelection: () => clearBoundarySelection(),
   deleteSelectedBoundaries: () => handleDeleteSelectedBoundaries(),
 })
 

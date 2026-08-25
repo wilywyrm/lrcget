@@ -269,7 +269,7 @@ export function useEditLyricsV2WordBoundaryDrag({
     const currentSelection = selectedBoundaryIndices.value
 
     if (event?.shiftKey && currentSelection.length > 0) {
-      const anchor = selectedBoundaryIndex.value
+      const anchor = selectedBoundaryIndex.value >= 0 ? selectedBoundaryIndex.value : index
       const min = Math.min(anchor, index)
       const max = Math.max(anchor, index)
       const range = Array.from({ length: max - min + 1 }, (_, offset) => min + offset)
@@ -281,7 +281,17 @@ export function useEditLyricsV2WordBoundaryDrag({
       const nextSelection = currentSelection.includes(index)
         ? currentSelection.filter(value => value !== index)
         : [...currentSelection, index]
+      if (nextSelection.length === 0) {
+        clearBoundarySelection()
+        return
+      }
       applySelection(nextSelection, index)
+      return
+    }
+
+    // Plain click on the only selected boundary toggles it off (deselect).
+    if (currentSelection.length === 1 && currentSelection[0] === index) {
+      clearBoundarySelection()
       return
     }
 
@@ -295,6 +305,11 @@ export function useEditLyricsV2WordBoundaryDrag({
       return false
     }
 
+    if (selectedBoundaryIndex.value < 0) {
+      resetBoundarySelection()
+      return true
+    }
+
     const nextIndex = Math.max(0, selectedBoundaryIndex.value - 1)
     applySelection([nextIndex], nextIndex)
     return true
@@ -305,6 +320,11 @@ export function useEditLyricsV2WordBoundaryDrag({
       return false
     }
 
+    if (selectedBoundaryIndex.value < 0) {
+      resetBoundarySelection()
+      return true
+    }
+
     const nextIndex = Math.min(words.value.length - 1, selectedBoundaryIndex.value + 1)
     applySelection([nextIndex], nextIndex)
     return true
@@ -313,6 +333,11 @@ export function useEditLyricsV2WordBoundaryDrag({
   const syncSelectedBoundary = (progressMs, options = {}) => {
     if (!isWordSyncAvailable.value) {
       return false
+    }
+
+    if (selectedBoundaryIndex.value < 0) {
+      resetBoundarySelection()
+      return true
     }
 
     const advance = options.advance !== false
@@ -430,6 +455,11 @@ export function useEditLyricsV2WordBoundaryDrag({
     return true
   }
 
+  const clearBoundarySelection = () => {
+    selectedBoundaryIndices.value = []
+    selectedBoundaryIndex.value = -1
+  }
+
   const resetBoundarySelection = () => {
     const defaultBoundaryIndex = Math.min(1, Math.max(0, words.value.length - 1))
     applySelection([defaultBoundaryIndex], defaultBoundaryIndex)
@@ -458,6 +488,7 @@ export function useEditLyricsV2WordBoundaryDrag({
     deleteSelectedBoundaries,
     stopBoundaryDrag,
     resetBoundarySelection,
+    clearBoundarySelection,
     cancelBoundaryInteraction,
   }
 }

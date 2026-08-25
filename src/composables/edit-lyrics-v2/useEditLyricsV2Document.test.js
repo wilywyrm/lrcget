@@ -5,6 +5,7 @@ import {
   deriveTransliterationId,
   TRANSLITERATION_PRESETS,
 } from './useEditLyricsV2Document.js'
+import { isLineOutOfSync } from '../../utils/transliteration-sync.js'
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn().mockResolvedValue(null),
@@ -266,5 +267,30 @@ describe('useEditLyricsV2Document line-level transliteration sync', () => {
     doc.updateLineTransliteration(0, 'romaji', '')
     doc.generateLineTransliterationFromCues(0, 'romaji', 'ja-Latn')
     expect(doc.syncedLines.value[0].transliteration.romaji).toBe('otona ni naru')
+  })
+
+  it('flags out-of-sync after the line-level value is edited to diverge from the cues', () => {
+    const doc = createDoc(ROMAJI_FIXTURE)
+    doc.initializeLyrics()
+    expect(isLineOutOfSync(doc.syncedLines.value[0], 'romaji')).toBe(false)
+    doc.updateLineTransliteration(0, 'romaji', 'otona ni nar')
+    expect(isLineOutOfSync(doc.syncedLines.value[0], 'romaji')).toBe(true)
+  })
+
+  it('stays in sync (no warning) after a cue edit that propagates into the line', () => {
+    const doc = createDoc(ROMAJI_FIXTURE)
+    doc.initializeLyrics()
+    editWordReading(doc, 0, 1, 'romaji', 'wa')
+    expect(doc.syncedLines.value[0].transliteration.romaji).toBe('otona wa naru')
+    expect(isLineOutOfSync(doc.syncedLines.value[0], 'romaji')).toBe(false)
+  })
+
+  it('is not out-of-sync when no line-level value exists (cue-only editing)', () => {
+    const doc = createDoc(ROMAJI_FIXTURE)
+    doc.initializeLyrics()
+    doc.updateLineTransliteration(0, 'romaji', '')
+    editWordReading(doc, 0, 2, 'romaji', 'nar')
+    expect(doc.syncedLines.value[0].transliteration?.romaji).toBeUndefined()
+    expect(isLineOutOfSync(doc.syncedLines.value[0], 'romaji')).toBe(false)
   })
 })
