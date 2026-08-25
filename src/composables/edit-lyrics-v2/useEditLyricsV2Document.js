@@ -6,6 +6,10 @@ import {
   parseLyricsfile,
   serializeLyricsfile,
 } from '@/utils/lyricsfile.js'
+import {
+  propagateCueEditToLine,
+  generateLineFromCues,
+} from '@/utils/transliteration-sync.js'
 
 const createEmptySyncedLine = () => normalizeSyncedLine({})
 
@@ -69,6 +73,24 @@ const deleteLineTransliteration = (line, id) => ({
       }))
     : line.words,
 })
+
+// Returns the one cue index whose `systemId` reading changed, or null when zero
+// or >1 changed (>1 = a structural split/merge/reset, which must NOT propagate).
+const findSingleChangedReadingIndex = (oldWords, newWords, systemId) => {
+  if (!Array.isArray(oldWords) || !Array.isArray(newWords)) return null
+  if (oldWords.length !== newWords.length) return null
+
+  let changedIndex = null
+  for (let i = 0; i < newWords.length; i++) {
+    const oldReading = oldWords[i]?.transliteration?.[systemId]
+    const newReading = newWords[i]?.transliteration?.[systemId]
+    if (oldReading !== newReading) {
+      if (changedIndex !== null) return null
+      changedIndex = i
+    }
+  }
+  return changedIndex
+}
 
 export const deriveTransliterationId = (presetName, existingIds = []) => {
   const slug = String(presetName ?? '')
@@ -580,6 +602,30 @@ export function useEditLyricsV2Document({ audioSource, lyricsfile, trackId, prog
       ? Math.max(0, Math.round(lineStartMs))
       : null
 
+    // Propagate a single-cue reading edit into each system's line-level value.
+    // propagateCueEditToLine only rewrites when line and cues already agree, so
+    // manual line-level spacing is preserved and never corrupted.
+    const oldLine = syncedLines.value[lineIndex]
+    const oldWords = Array.isArray(oldLine?.words) ? oldLine.words : []
+    const nextWords = Array.isArray(words) ? words : []
+    let nextTransliteration = oldLine?.transliteration
+
+    if (oldWords.length === nextWords.length) {
+      for (const { id: systemId } of declaredTransliterations.value) {
+        const changedIndex = findSingleChangedReadingIndex(oldWords, nextWords, systemId)
+        if (changedIndex === null) continue
+
+        const oldValue = nextTransliteration?.[systemId]
+        const patched = propagateCueEditToLine(oldValue, oldWords, nextWords, systemId, changedIndex)
+        if (patched !== oldValue) {
+          nextTransliteration = collapseEmptyMap({
+            ...(nextTransliteration || {}),
+            [systemId]: patched,
+          })
+        }
+      }
+    }
+
     applyLineMutation(lines =>
       lines.map((line, index) => {
         if (index !== lineIndex) return line
@@ -587,9 +633,46 @@ export function useEditLyricsV2Document({ audioSource, lyricsfile, trackId, prog
           ...line,
           ...(nextLineStartMs === null ? {} : { start_ms: nextLineStartMs }),
           words,
+          transliteration: nextTransliteration,
         }
       })
     )
+  }
+
+  const updateLineTransliteration = (lineIndex, systemId, value) => {
+    if (!Number.isInteger(lineIndex) || lineIndex < 0 || lineIndex >= syncedLines.value.length) {
+      return
+    }
+    if (!systemId) return
+
+    withUpdatedLine(lineIndex, line => {
+      const nextMap = { ...(line.transliteration || {}) }
+      const raw = typeof value === 'string' ? value : ''
+      if (raw.trim() === '') {
+        delete nextMap[systemId]
+      } else {
+        nextMap[systemId] = raw
+      }
+      return { ...line, transliteration: collapseEmptyMap(nextMap) }
+    })
+  }
+
+  const generateLineTransliterationFromCues = (lineIndex, systemId, system) => {
+    if (!Number.isInteger(lineIndex) || lineIndex < 0 || lineIndex >= syncedLines.value.length) {
+      return
+    }
+    if (!systemId) return
+
+    withUpdatedLine(lineIndex, line => {
+      const generated = generateLineFromCues(line, systemId, system)
+      const nextMap = { ...(line.transliteration || {}) }
+      if (!generated) {
+        delete nextMap[systemId]
+      } else {
+        nextMap[systemId] = generated
+      }
+      return { ...line, transliteration: collapseEmptyMap(nextMap) }
+    })
   }
 
   const rewindLineBy100 = lineIndex => {
@@ -795,6 +878,8 @@ export function useEditLyricsV2Document({ audioSource, lyricsfile, trackId, prog
     ensureSelectedSyncedLine,
     updateLineText,
     updateLineWords,
+    updateLineTransliteration,
+    generateLineTransliterationFromCues,
     eraseWordTimings,
     setInstrumental,
     selectedTransliterationSystem,

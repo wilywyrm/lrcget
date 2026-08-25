@@ -359,9 +359,52 @@
 
       </div>
 
-      <!-- Playhead spans the spectrograph + transliteration track + timeline
-           only — it is inside the sub-wrapper so it never overlaps the
-           controls bar above. -->
+      <!-- Line-level transliteration lane: one full-width editable field for
+           the whole-line reading under the active system, sitting directly
+           below the timeline as a sibling surface. Spacing is preserved
+           verbatim. Shows an amber out-of-sync warning (romanization systems
+           only) when the line-level reading diverges from the cue concat, plus
+           an explicit "Generate from cues" rebuild. -->
+      <div
+        v-if="selectedTransliterationSystem"
+        class="relative shrink-0 mt-1 flex items-center gap-2 px-2 rounded-b overflow-hidden"
+        :class="
+          showLineSyncWarning
+            ? 'bg-amber-100 dark:bg-amber-950/40 border border-amber-400'
+            : 'bg-neutral-50 dark:bg-neutral-900 border-t border-x-0 border-b-0 border-neutral-300 dark:border-neutral-600'
+        "
+        style="height: 1.75rem"
+      >
+        <Alert
+          v-if="showLineSyncWarning"
+          class="shrink-0 w-3.5 h-3.5 text-amber-700 dark:text-amber-300"
+          title="Line-level and cue-level readings are out of sync"
+        />
+        <input
+          :value="lineLevelReading"
+          type="text"
+          class="grow min-w-0 h-full bg-transparent outline-none border-none p-0 text-xs"
+          :class="
+            showLineSyncWarning
+              ? 'text-amber-700 dark:text-amber-300 placeholder:text-amber-600/60 dark:placeholder:text-amber-300/50'
+              : 'text-neutral-700 dark:text-neutral-300 placeholder:text-neutral-400 dark:placeholder:text-neutral-500'
+          "
+          placeholder="No line-level reading — edit or Generate from cues"
+          @input="handleLineTransliterationInput"
+        />
+        <button
+          class="button button-normal shrink-0 rounded px-2 py-0.5 text-[0.65rem]"
+          title="Generate line-level reading from the cue readings"
+          type="button"
+          @click="handleGenerateLineFromCues"
+        >
+          Generate from cues
+        </button>
+      </div>
+
+      <!-- Playhead spans the spectrograph + transliteration track + timeline +
+           line-level lane — it is inside the sub-wrapper so it never overlaps
+           the controls bar above. -->
       <div
         v-if="progressMs >= lineStartMs && progressMs <= laneEndMs"
         class="absolute -top-1 bottom-0 w-px bg-neutral-400 dark:bg-neutral-400 z-20 pointer-events-none"
@@ -389,6 +432,7 @@ import Plus from '~icons/mdi/plus'
 import Pencil from '~icons/mdi/pencil'
 import Trash from '~icons/mdi/trash-can'
 import Check from '~icons/mdi/check'
+import Alert from '~icons/mdi/alert'
 import { useGlobalState } from '@/composables/global-state.js'
 import SpectrogramPanel from '@/components/library/edit-lyrics-v2/SpectrogramPanel.vue'
 import SyncedWordTimingSegment from '@/components/library/edit-lyrics-v2/SyncedWordTimingSegment.vue'
@@ -401,6 +445,7 @@ import {
   withShortcutTitle,
 } from '@/composables/edit-lyrics-v2/shortcutRegistry.js'
 import { formatTimestampMs, splitWordTransliteration } from '@/utils/lyricsfile.js'
+import { isLineOutOfSync, isRomanizationSystem } from '@/utils/transliteration-sync.js'
 import { TRANSLITERATION_PRESETS } from '@/composables/edit-lyrics-v2/useEditLyricsV2Document.js'
 import {
   ensureLineWords,
@@ -458,6 +503,8 @@ const emit = defineEmits([
   'add-transliteration-system',
   'edit-transliteration-system',
   'remove-transliteration-system',
+  'update:line-transliteration',
+  'generate-line-transliteration',
 ])
 
 const { spectrogramVisible, toggleSpectrogramVisible } = useGlobalState()
@@ -620,10 +667,11 @@ const hasSpectrogramSlot = computed(
 const laneHeightClass = computed(() => {
   const hasTransliteration = !!props.selectedTransliterationSystem
   // Base heights are increased by ~2rem vs the old values to account for the
-  // always-visible controls bar (h-7 + mb-2). The transliteration track adds
-  // a further 1.75rem when a reading system is active.
-  if (hasSpectrogramSlot.value) return hasTransliteration ? 'h-[16.75rem]' : 'h-[15rem]'
-  if (isWordSyncAvailable.value) return hasTransliteration ? 'h-[10.75rem]' : 'h-[9rem]'
+  // always-visible controls bar (h-7 + mb-2). When a reading system is active
+  // two extra rows appear (~1.75rem each): the cue transliteration track above
+  // the timeline and the line-level reading lane below it — so +3.5rem total.
+  if (hasSpectrogramSlot.value) return hasTransliteration ? 'h-[18.5rem]' : 'h-[15rem]'
+  if (isWordSyncAvailable.value) return hasTransliteration ? 'h-[12.5rem]' : 'h-[9rem]'
   return 'h-[7rem]'
 })
 
@@ -790,6 +838,48 @@ const getWordSegmentStyle = index => {
   const endMs = getWordEndMs(index)
   const widthPercent = (Math.max(0, endMs - word.start_ms) / duration) * 100
   return { left: `${leftPercent}%`, width: `${widthPercent}%` }
+}
+
+// --- Line-level transliteration lane (whole-line reading below the timeline) --
+
+// The raw line-level reading string for the active system, or '' when absent.
+// Kept verbatim (spacing is the whole point of a line-level reading).
+const lineLevelReading = computed(() => {
+  const system = props.selectedTransliterationSystem
+  if (!system) return ''
+  return props.selectedLine?.transliteration?.[system.id] ?? ''
+})
+
+// Amber warning: the line-level reading diverges (beyond whitespace) from the
+// cue concatenation. Only meaningful for romanization systems, whose line-level
+// values carry inter-word spaces the cues can't represent.
+const showLineSyncWarning = computed(() => {
+  const system = props.selectedTransliterationSystem
+  if (!system) return false
+  return isRomanizationSystem(system.system) && isLineOutOfSync(props.selectedLine, system.id)
+})
+
+// Verbatim direct edit of the line-level reading — no trim, so user spacing is
+// preserved. The composable collapses an all-whitespace value to cleared.
+const handleLineTransliterationInput = event => {
+  const system = props.selectedTransliterationSystem
+  if (!system) return
+  emit('update:line-transliteration', {
+    lineIndex: props.selectedLineIndex,
+    systemId: system.id,
+    value: event.target.value,
+  })
+}
+
+// Explicit, opt-in rebuild of the line-level reading from the cues.
+const handleGenerateLineFromCues = () => {
+  const system = props.selectedTransliterationSystem
+  if (!system) return
+  emit('generate-line-transliteration', {
+    lineIndex: props.selectedLineIndex,
+    systemId: system.id,
+    system: system.system,
+  })
 }
 
 const handleBoundaryPointerDown = (rightWordIndex, event) => {

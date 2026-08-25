@@ -83,20 +83,28 @@
         :aria-label="hasWordSync ? 'Word synced' : 'Word not synced'"
       />
 
-      <template v-if="hasWordSync">
+      <!-- Active reading system with a line-level value: show that reading as a
+           single string (it is one string — no per-word highlighting). -->
+      <template v-if="showLineLevelReading">
+        <span class="whitespace-pre-wrap">{{ lineLevelReading }}</span>
+      </template>
+      <!-- Otherwise show the main text. When a system is active but this line has
+           no line-level reading yet, fade it to signal the missing reading. -->
+      <template v-else-if="hasWordSync">
         <span
           v-for="(word, wordIndex) in line.words"
           :key="wordIndex"
           class="whitespace-pre-wrap"
           :class="{
             'text-yellow-600 dark:text-yellow-300 font-bold': wordIndex === currentWordIndex,
+            'opacity-40': isFadedMainText,
           }"
         >
           {{ word.text }}
         </span>
       </template>
       <template v-else>
-        {{ line.text || ' ' }}
+        <span :class="{ 'opacity-40': isFadedMainText }">{{ line.text || ' ' }}</span>
       </template>
     </div>
 
@@ -170,7 +178,6 @@ import Play from '~icons/mdi/play'
 import Equal from '~icons/mdi/equal'
 import Rewind from '~icons/mdi/rewind'
 import Forward from '~icons/mdi/fast-forward'
-import Close from '~icons/mdi/close'
 import Trash from '~icons/mdi/trash-can'
 import ArrowCollapseRight from '~icons/mdi/arrow-collapse-right'
 import {
@@ -225,6 +232,10 @@ const props = defineProps({
   },
   nextLineStartMs: {
     type: Number,
+    default: null,
+  },
+  selectedTransliterationSystem: {
+    type: Object,
     default: null,
   },
 })
@@ -348,6 +359,20 @@ const endTimestampPillTitle = computed(() => {
 const hasWordSync = computed(() => {
   return props.line?.words && Array.isArray(props.line.words) && props.line.words.length > 0
 })
+
+// Active transliteration system id (if any), and this line's line-level reading
+// under it. When a system is active the row shows the line-level reading in
+// place of the main text; when the line has none, the main text is faded to
+// signal "no line-level transliteration yet".
+const activeSystemId = computed(() => props.selectedTransliterationSystem?.id ?? null)
+
+const lineLevelReading = computed(() =>
+  activeSystemId.value ? props.line?.transliteration?.[activeSystemId.value] || '' : ''
+)
+
+const showLineLevelReading = computed(() => !!activeSystemId.value && lineLevelReading.value !== '')
+
+const isFadedMainText = computed(() => !!activeSystemId.value && lineLevelReading.value === '')
 
 // Determine the currently playing word index based on progressMs
 const currentWordIndex = computed(() => {

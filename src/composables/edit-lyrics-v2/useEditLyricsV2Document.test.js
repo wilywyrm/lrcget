@@ -151,3 +151,120 @@ describe('useEditLyricsV2Document transliteration systems', () => {
     expect(serialized).toContain('romaji')
   })
 })
+
+const ROMAJI_FIXTURE = `version: '1.0'
+metadata:
+  title: 'Song'
+  artist: 'Artist'
+  language: 'ja'
+  transliterations:
+    - id: hira
+      system: 'ja-Hrkt'
+    - id: romaji
+      system: 'ja-Latn'
+lines:
+  - text: '大人になる'
+    start_ms: 1000
+    end_ms: 5000
+    transliteration:
+      hira: 'おとなになる'
+      romaji: 'otona ni naru'
+    words:
+      - text: '大人'
+        start_ms: 1000
+        end_ms: 2500
+        transliteration:
+          hira: 'おとな'
+          romaji: 'otona'
+      - text: 'に'
+        start_ms: 2500
+        end_ms: 3500
+        transliteration:
+          romaji: 'ni'
+      - text: 'なる'
+        start_ms: 3500
+        end_ms: 5000
+        transliteration:
+          hira: 'なる'
+          romaji: 'naru'
+`
+
+const editWordReading = (doc, lineIndex, wordIndex, systemId, reading) => {
+  const words = doc.syncedLines.value[lineIndex].words.map((word, i) => {
+    if (i !== wordIndex) return { ...word }
+    const nextMap = { ...(word.transliteration || {}) }
+    if (reading === '') delete nextMap[systemId]
+    else nextMap[systemId] = reading
+    return { ...word, transliteration: Object.keys(nextMap).length ? nextMap : undefined }
+  })
+  doc.updateLineWords({ lineIndex, words })
+}
+
+describe('useEditLyricsV2Document line-level transliteration sync', () => {
+  it('propagates a cue reading edit into the line-level value, preserving spacing', () => {
+    const doc = createDoc(ROMAJI_FIXTURE)
+    doc.initializeLyrics()
+    editWordReading(doc, 0, 1, 'romaji', 'wa')
+    expect(doc.syncedLines.value[0].transliteration.romaji).toBe('otona wa naru')
+  })
+
+  it('never collapses spacing (regression guard for the naive-concat bug)', () => {
+    const doc = createDoc(ROMAJI_FIXTURE)
+    doc.initializeLyrics()
+    editWordReading(doc, 0, 1, 'romaji', 'wa')
+    expect(doc.syncedLines.value[0].transliteration.romaji).not.toBe('otonawanaru')
+  })
+
+  it('leaves other declared systems untouched when one system is edited', () => {
+    const doc = createDoc(ROMAJI_FIXTURE)
+    doc.initializeLyrics()
+    editWordReading(doc, 0, 1, 'romaji', 'wa')
+    expect(doc.syncedLines.value[0].transliteration.hira).toBe('おとなになる')
+  })
+
+  it('skips propagation on a structural word-count change (split/merge)', () => {
+    const doc = createDoc(ROMAJI_FIXTURE)
+    doc.initializeLyrics()
+    const words = doc.syncedLines.value[0].words
+    const split = [
+      { ...words[0] },
+      { ...words[1] },
+      { text: '!', start_ms: 3200 },
+      { ...words[2] },
+    ]
+    doc.updateLineWords({ lineIndex: 0, words: split })
+    expect(doc.syncedLines.value[0].transliteration.romaji).toBe('otona ni naru')
+  })
+
+  it('writes a direct line-level edit verbatim, then surgically patches one cue span', () => {
+    const doc = createDoc(ROMAJI_FIXTURE)
+    doc.initializeLyrics()
+    doc.updateLineTransliteration(0, 'romaji', 'otona  ni  naru')
+    expect(doc.syncedLines.value[0].transliteration.romaji).toBe('otona  ni  naru')
+    editWordReading(doc, 0, 2, 'romaji', 'naruu')
+    expect(doc.syncedLines.value[0].transliteration.romaji).toBe('otona  ni  naruu')
+  })
+
+  it('clears the line-level key on an all-whitespace direct edit', () => {
+    const doc = createDoc(ROMAJI_FIXTURE)
+    doc.initializeLyrics()
+    doc.updateLineTransliteration(0, 'romaji', '   ')
+    expect(doc.syncedLines.value[0].transliteration?.romaji).toBeUndefined()
+  })
+
+  it('declines to propagate (never clobbers) a manually desynced line', () => {
+    const doc = createDoc(ROMAJI_FIXTURE)
+    doc.initializeLyrics()
+    doc.updateLineTransliteration(0, 'romaji', 'xxxxx')
+    editWordReading(doc, 0, 1, 'romaji', 'wa')
+    expect(doc.syncedLines.value[0].transliteration.romaji).toBe('xxxxx')
+  })
+
+  it('regenerates the line-level value space-joined for a romanization system', () => {
+    const doc = createDoc(ROMAJI_FIXTURE)
+    doc.initializeLyrics()
+    doc.updateLineTransliteration(0, 'romaji', '')
+    doc.generateLineTransliterationFromCues(0, 'romaji', 'ja-Latn')
+    expect(doc.syncedLines.value[0].transliteration.romaji).toBe('otona ni naru')
+  })
+})

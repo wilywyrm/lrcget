@@ -116,6 +116,8 @@
         @add-transliteration-system="addTransliterationSystem($event.presetName, $event.customSystem)"
         @edit-transliteration-system="editTransliterationSystem($event.oldId, $event.newSystem)"
         @remove-transliteration-system="removeTransliterationSystem($event)"
+        @update:line-transliteration="({ lineIndex, systemId, value }) => updateLineTransliteration(lineIndex, systemId, value)"
+        @generate-line-transliteration="({ lineIndex, systemId, system }) => generateLineTransliterationFromCues(lineIndex, systemId, system)"
         @update:model-value="updateSyncedLines"
         @update:selected-line-index="selectSyncedLine"
         @update:selected-line-indices="handleUpdateSelectedLineIndices"
@@ -260,6 +262,8 @@ const {
   ensureSelectedSyncedLine,
   updateLineText,
   updateLineWords,
+  updateLineTransliteration,
+  generateLineTransliterationFromCues,
   setInstrumental,
   selectedTransliterationSystem,
   declaredTransliterations,

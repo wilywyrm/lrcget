@@ -21,6 +21,8 @@
       @add-transliteration-system="$emit('add-transliteration-system', $event)"
       @edit-transliteration-system="$emit('edit-transliteration-system', $event)"
       @remove-transliteration-system="$emit('remove-transliteration-system', $event)"
+      @update:line-transliteration="$emit('update:line-transliteration', $event)"
+      @generate-line-transliteration="$emit('generate-line-transliteration', $event)"
     />
 
     <div
@@ -55,6 +57,7 @@
             :set-line-input-ref="setLineInputRef"
             :progress-ms="progressMs"
             :next-line-start-ms="nextLineStartMs(index)"
+            :selected-transliteration-system="selectedTransliterationSystem"
             @mouseenter="hoveredLineIndex = index"
             @mouseleave="hoveredLineIndex = null"
             @select="selectLine"
@@ -218,6 +221,8 @@ const emit = defineEmits([
   'add-transliteration-system',
   'edit-transliteration-system',
   'remove-transliteration-system',
+  'update:line-transliteration',
+  'generate-line-transliteration',
 ])
 
 // Effective end of a line for overlap detection: prefer the line's own end_ms,
