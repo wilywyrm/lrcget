@@ -286,6 +286,7 @@
         ref="timelineElement"
         class="relative flex-1 bg-white dark:bg-neutral-900 rounded border border-neutral-300 dark:border-neutral-600 transition-opacity duration-200 cursor-pointer"
         :class="{ 'opacity-50': !hasActualWords }"
+        @click.capture="handleTimelineCaptureDeselect"
         @click="handleTimelineClick"
       >
         <!-- Timeline grid lines (every 500ms) -->
@@ -330,6 +331,7 @@
           v-for="index in boundaryIndexes"
           :key="`boundary-${index}`"
           type="button"
+          data-boundary-handle
           class="group absolute top-0 bottom-0 z-30 -ml-2 w-4 cursor-ew-resize bg-transparent"
           :style="{ left: `${timeToPercent(displayedWords[index].start_ms)}%` }"
           :title="`Adjust start of ${displayedWords[index].text}`"
@@ -1031,6 +1033,7 @@ const handleSegmentSplitAt = ({ wordIndex, splitIndex, splitRatio, splitClientX 
 const handleActivateEditor = index => {
   if (!props.selectedTransliterationSystem) return
   if (!Number.isInteger(index) || index < 0 || index >= displayedWords.value.length) return
+  clearBoundarySelection()
   activeWordIndex.value = index
 }
 
@@ -1244,6 +1247,16 @@ const handleResetWords = async () => {
   // Wait for parent state to apply, then force segmentation so first reset is reliable.
   await nextTick()
   await loadDefaultSegmentation({ force: true })
+}
+
+// Capture-phase deselect: a click anywhere inside the timeline that is NOT on a
+// boundary handle clears the selection. Capture runs before a segment's
+// bubble-phase stopPropagation (which a hovered split preview triggers), so
+// clicking even a multi-character segment still deselects; boundary handles are
+// skipped so their own bubble-phase click can still select/toggle.
+const handleTimelineCaptureDeselect = event => {
+  if (event.target.closest('[data-boundary-handle]')) return
+  clearBoundarySelection()
 }
 
 const handleTimelineClick = event => {
