@@ -413,27 +413,32 @@ defineExpose({
 <style scoped>
 /*
  * "Both desync AND overlap" full-row warning: 45° equal-width diagonal stripes
- * alternating the SAME amber/rose used by the solo warning rows in
- * SyncedLyricsEditor.vue's rowClass():
- *   amber → desync  (light bg-amber-100 #fef3c7 / dark bg-amber-900/40)
- *   rose  → overlap (light bg-rose-100  #ffe4e6 / dark bg-rose-950/40)
- * A repeating-linear-gradient can't be expressed as a Tailwind utility, so it
- * lives here. Dark mode follows the app's class strategy (`.dark` on <html>,
- * see tailwind.config.cjs darkMode: 'class').
+ * alternating a vivid amber (desync) with a comparably-vivid rose (overlap) so
+ * neither 10px band dominates. The amber band matches the solo desync wash and
+ * the line-level lane's amber-400 desync border:
+ *   amber → desync  (light amber-400 #fbbf24 / dark amber-400 @ 20%)
+ *   rose  → overlap (light rose-400  #fb7185 / dark rose-400  @ 20%)
+ * The rose band is bumped to rose-400 (vs the solo overlap row's paler rose-100)
+ * ONLY so it stays balanced against the vivid amber-400 here; the solo overlap
+ * wash is unchanged. Dark uses 20% of each -400 tone so the stripes stay dark
+ * enough for the row's neutral-400/white text (mirroring the solo desync's dark
+ * amber-400/20). A repeating-linear-gradient can't be expressed as a Tailwind
+ * utility, so it lives here. Dark mode follows the app's class strategy (`.dark`
+ * on <html>, see tailwind.config.cjs darkMode: 'class').
  */
 .lyric-row-warn-both {
   background-image: repeating-linear-gradient(
     45deg,
-    #fef3c7 0 10px,
-    #ffe4e6 10px 20px
+    #fbbf24 0 10px,
+    #fb7185 10px 20px
   );
 }
 
 .dark .lyric-row-warn-both {
   background-image: repeating-linear-gradient(
     45deg,
-    rgba(120, 53, 15, 0.4) 0 10px,
-    rgba(76, 5, 25, 0.4) 10px 20px
+    rgba(251, 191, 36, 0.2) 0 10px,
+    rgba(251, 113, 133, 0.2) 10px 20px
   );
 }
 </style>

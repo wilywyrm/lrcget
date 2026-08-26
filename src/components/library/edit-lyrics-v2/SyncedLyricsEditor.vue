@@ -424,22 +424,22 @@ const isLineDesynced = index =>
   isLineOutOfSync(props.modelValue[index], props.selectedTransliterationSystem.id)
 
 const rowClass = index => {
-  if (isLineRowSelected(index) || props.selectedLineIndex === index || editingLineIndex.value === index) {
-    return 'bg-neutral-100 dark:bg-neutral-800'
-  }
-
-  if (hoveredLineIndex.value === index) {
-    return 'bg-neutral-50 dark:bg-neutral-800/50'
-  }
-
   // Two independent per-line warnings, shown as a full-row wash so problem
-  // clusters are visible at a glance (matches how overlap behaved before —
-  // only when the row isn't selected/hovered/editing):
-  //   desync only  → solid amber
-  //   overlap only → solid rose (red)
-  //   both         → 45° equal-width amber/rose diagonal stripes, via the
-  //                  scoped `.lyric-row-warn-both` class in SyncedLyricsLineRow.vue
-  //                  (a repeating-linear-gradient no Tailwind utility can express).
+  // clusters are visible at a glance. DESYNC takes precedence over the
+  // selection/editing/hover states: a desynced row must always advertise its
+  // warning color (the same amber-400 the line-level lane uses for its desync
+  // border) even while selected, edited, hovered, or playing back. Overlap-only
+  // stays SUBORDINATE to selection (unchanged from before). Order matters:
+  //   desync + overlap → 45° equal-width amber-400/rose-400 diagonal stripes,
+  //                      via the scoped `.lyric-row-warn-both` class in
+  //                      SyncedLyricsLineRow.vue (a repeating-linear-gradient no
+  //                      Tailwind utility can express).
+  //   desync only      → solid amber-400 (dark: amber-400 @ 20% opacity so the
+  //                      neutral-400/white row text stays legible over it while
+  //                      still reading as the lane's yellow).
+  //   selected/editing → neutral gray (loses to desync, still beats hover/overlap).
+  //   hover            → subtle neutral gray.
+  //   overlap only     → solid rose (red), subordinate to selection above.
   const desynced = isLineDesynced(index)
   const overlapping = overlappingLineIndexes.value.has(index)
 
@@ -448,7 +448,15 @@ const rowClass = index => {
   }
 
   if (desynced) {
-    return 'bg-amber-100 dark:bg-amber-900/40'
+    return 'bg-amber-400 dark:bg-amber-400/20'
+  }
+
+  if (isLineRowSelected(index) || props.selectedLineIndex === index || editingLineIndex.value === index) {
+    return 'bg-neutral-100 dark:bg-neutral-800'
+  }
+
+  if (hoveredLineIndex.value === index) {
+    return 'bg-neutral-50 dark:bg-neutral-800/50'
   }
 
   if (overlapping) {
