@@ -150,6 +150,7 @@ import SyncedWordTimingLane from '@/components/library/edit-lyrics-v2/SyncedWord
 import { useEditLyricsV2SyncedInlineEditing } from '@/composables/edit-lyrics-v2/useEditLyricsV2SyncedInlineEditing.js'
 import { useEditLyricsV2SyncedInsertHover } from '@/composables/edit-lyrics-v2/useEditLyricsV2SyncedInsertHover.js'
 import { formatTimestampMs } from '@/utils/lyricsfile.js'
+import { isLineOutOfSync } from '@/utils/transliteration-sync.js'
 
 const props = defineProps({
   modelValue: {
@@ -415,6 +416,13 @@ const scrollLineIntoView = index => {
   })
 }
 
+// A line is "desynced" when a transliteration system is active and this line's
+// line-level reading disagrees with its cue-level readings for that system.
+// With no active system there is no desync (overlap warnings still apply).
+const isLineDesynced = index =>
+  !!props.selectedTransliterationSystem &&
+  isLineOutOfSync(props.modelValue[index], props.selectedTransliterationSystem.id)
+
 const rowClass = index => {
   if (isLineRowSelected(index) || props.selectedLineIndex === index || editingLineIndex.value === index) {
     return 'bg-neutral-100 dark:bg-neutral-800'
@@ -424,10 +432,27 @@ const rowClass = index => {
     return 'bg-neutral-50 dark:bg-neutral-800/50'
   }
 
-  // Dim warning color for every line that's part of an overlapping pair, so
-  // overlap clusters in the song are visible at a glance.
-  if (overlappingLineIndexes.value.has(index)) {
-    return 'bg-amber-50 dark:bg-amber-900/20'
+  // Two independent per-line warnings, shown as a full-row wash so problem
+  // clusters are visible at a glance (matches how overlap behaved before —
+  // only when the row isn't selected/hovered/editing):
+  //   desync only  → solid amber
+  //   overlap only → solid rose (red)
+  //   both         → 45° equal-width amber/rose diagonal stripes, via the
+  //                  scoped `.lyric-row-warn-both` class in SyncedLyricsLineRow.vue
+  //                  (a repeating-linear-gradient no Tailwind utility can express).
+  const desynced = isLineDesynced(index)
+  const overlapping = overlappingLineIndexes.value.has(index)
+
+  if (desynced && overlapping) {
+    return 'lyric-row-warn-both'
+  }
+
+  if (desynced) {
+    return 'bg-amber-100 dark:bg-amber-900/40'
+  }
+
+  if (overlapping) {
+    return 'bg-rose-100 dark:bg-rose-950/40'
   }
 
   return 'bg-transparent'

@@ -25,12 +25,69 @@
 // and left intact.
 export const stripWhitespace = value => (typeof value === 'string' ? value : '').replace(/\s/gu, '')
 
-// A cue's "effective reading" for a system: its stored reading, else its raw text.
-// Kana/hangul read as themselves; an unread ideograph contributes its ideographs,
-// which correctly forces an out-of-sync/decline against an all-Latin line rather
-// than pretending the line can be reconstructed from the cues.
-export const effectiveReading = (word, systemId) =>
-  (word && word.transliteration && word.transliteration[systemId]) || (word && word.text) || ''
+// Per-character kanji test: CJK Unified + Extension A, plus the ideographic
+// iteration marks 々〻 (which repeat the preceding kanji and share its ruby run).
+const isKanjiChar = ch => {
+  const cp = ch.codePointAt(0)
+  return (cp >= 0x4e00 && cp <= 0x9fff) || (cp >= 0x3400 && cp <= 0x4dbf) || ch === '々' || ch === '〻'
+}
+
+// Append `trailing` kana to `reading`, skipping any suffix `reading` already
+// carries — so a kanji-only ruby (た) and a full whole-word reading (たべる) both
+// compose to the same result for surface 食べる.
+const mergeTrailingKana = (reading, trailing) => {
+  if (!trailing) return reading
+  for (let k = Math.min(reading.length, trailing.length); k > 0; k--) {
+    if (reading.endsWith(trailing.slice(0, k))) return reading + trailing.slice(k)
+  }
+  return reading + trailing
+}
+
+// Mirror of mergeTrailingKana for kana that precede the kanji run (お in お客).
+const mergeLeadingKana = (leading, reading) => {
+  if (!leading) return reading
+  for (let k = Math.min(reading.length, leading.length); k > 0; k--) {
+    if (reading.startsWith(leading.slice(leading.length - k))) {
+      return leading.slice(0, leading.length - k) + reading
+    }
+  }
+  return leading + reading
+}
+
+// Fold a word's okurigana — the kana in its surface outside a single kanji run —
+// into a kana ruby reading, so cue 沈ん with ruby しず contributes しずん (ports
+// txtlyric-to-lrc's _compose_reading). KANA-only: a reading already carrying
+// Latin (romaji stores the full word per LYRICSFILE §5b) is returned unchanged,
+// since folding kana onto Latin would corrupt it. A surface with no kanji, or
+// more than one kanji run (a single ruby can't be aligned), also passes through.
+export const composeReading = (surface, reading) => {
+  if (!reading || typeof reading !== 'string' || /[A-Za-z]/u.test(reading)) return reading
+  const chars = Array.from(typeof surface === 'string' ? surface : '')
+  const kanji = []
+  chars.forEach((ch, i) => {
+    if (isKanjiChar(ch)) kanji.push(i)
+  })
+  if (kanji.length === 0) return reading
+  const first = kanji[0]
+  const last = kanji[kanji.length - 1]
+  for (let i = first; i <= last; i++) {
+    if (!isKanjiChar(chars[i])) return reading
+  }
+  const leading = chars.slice(0, first).join('')
+  const trailing = chars.slice(last + 1).join('')
+  return mergeLeadingKana(leading, mergeTrailingKana(reading, trailing))
+}
+
+// A cue's "effective reading" for a system: its stored reading with okurigana
+// folded in (see composeReading), else its raw text. Kana/hangul read as
+// themselves; an unread ideograph contributes its ideographs, which correctly
+// forces an out-of-sync/decline against an all-Latin line rather than pretending
+// the line can be reconstructed from the cues.
+export const effectiveReading = (word, systemId) => {
+  const reading = word && word.transliteration ? word.transliteration[systemId] : undefined
+  if (!reading) return (word && word.text) || ''
+  return composeReading((word && word.text) || '', reading)
+}
 
 // A romanization system is any BCP-47 tag carrying a `Latn` script subtag
 // (ja-Latn, zh-Latn-pinyin, ko-Latn, de-Latn, …). Compared case-insensitively
@@ -89,14 +146,24 @@ export function propagateCueEditToLine(oldLineValue, oldWords, newWords, systemI
   }
 
   const L = oldLineValue
-  const newReading = (newWords[changedIndex] && newWords[changedIndex].transliteration
-    ? newWords[changedIndex].transliteration[systemId]
-    : '') ?? ''
-  const oldStrip = stripWhitespace(effectiveReading(oldWords[changedIndex], systemId))
 
-  // Only true value-replacements propagate. An unread→read transition (old reading
-  // empty) has no width to anchor, and a read→cleared transition (new reading
-  // empty) would leave dangling spacing — both decline and defer to the warning.
+  // Only a genuine reading→reading value edit propagates. If either side has no
+  // stored reading — unread→read has no width to anchor, read→cleared would drop
+  // the span — decline and defer to the out-of-sync warning.
+  const rawOldReading =
+    oldWords[changedIndex] && oldWords[changedIndex].transliteration
+      ? oldWords[changedIndex].transliteration[systemId]
+      : undefined
+  const rawNewReading =
+    newWords[changedIndex] && newWords[changedIndex].transliteration
+      ? newWords[changedIndex].transliteration[systemId]
+      : undefined
+  if (!rawOldReading || !rawNewReading) return oldLineValue
+
+  // Insert the COMPOSED reading (okurigana folded in), not the raw ruby, so an
+  // edit to 沈ん's ruby (しず→しづ) rewrites しずん→しづん and never drops the ん.
+  const newReading = effectiveReading(newWords[changedIndex], systemId)
+  const oldStrip = stripWhitespace(effectiveReading(oldWords[changedIndex], systemId))
   if (oldStrip === '' || stripWhitespace(newReading) === '') return oldLineValue
 
   const leftStrip = stripWhitespace(

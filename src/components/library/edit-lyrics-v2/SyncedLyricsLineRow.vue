@@ -409,3 +409,31 @@ defineExpose({
   rowElement,
 })
 </script>
+
+<style scoped>
+/*
+ * "Both desync AND overlap" full-row warning: 45° equal-width diagonal stripes
+ * alternating the SAME amber/rose used by the solo warning rows in
+ * SyncedLyricsEditor.vue's rowClass():
+ *   amber → desync  (light bg-amber-100 #fef3c7 / dark bg-amber-900/40)
+ *   rose  → overlap (light bg-rose-100  #ffe4e6 / dark bg-rose-950/40)
+ * A repeating-linear-gradient can't be expressed as a Tailwind utility, so it
+ * lives here. Dark mode follows the app's class strategy (`.dark` on <html>,
+ * see tailwind.config.cjs darkMode: 'class').
+ */
+.lyric-row-warn-both {
+  background-image: repeating-linear-gradient(
+    45deg,
+    #fef3c7 0 10px,
+    #ffe4e6 10px 20px
+  );
+}
+
+.dark .lyric-row-warn-both {
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(120, 53, 15, 0.4) 0 10px,
+    rgba(76, 5, 25, 0.4) 10px 20px
+  );
+}
+</style>

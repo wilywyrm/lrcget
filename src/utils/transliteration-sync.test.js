@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   stripWhitespace,
   effectiveReading,
+  composeReading,
   isRomanizationSystem,
   propagateCueEditToLine,
   isLineOutOfSync,
@@ -259,5 +260,102 @@ describe('generateLineFromCues', () => {
   it('returns undefined for an empty line', () => {
     expect(generateLineFromCues({ words: [] }, 'romaji', 'ja-Latn')).toBeUndefined()
     expect(generateLineFromCues({}, 'romaji', 'ja-Latn')).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// composeReading (okurigana folding)
+// ---------------------------------------------------------------------------
+
+describe('composeReading', () => {
+  it('folds a trailing okurigana into a kanji ruby (沈ん + しず → しずん)', () => {
+    expect(composeReading('沈ん', 'しず')).toBe('しずん')
+  })
+
+  it('folds a multi-kana okurigana suffix (食べる + た → たべる)', () => {
+    expect(composeReading('食べる', 'た')).toBe('たべる')
+  })
+
+  it('dedups when the ruby is already the full word reading (食べる + たべる → たべる)', () => {
+    expect(composeReading('食べる', 'たべる')).toBe('たべる')
+  })
+
+  it('folds leading okurigana (お客 + きゃく → おきゃく)', () => {
+    expect(composeReading('お客', 'きゃく')).toBe('おきゃく')
+  })
+
+  it('dedups a leading kana already present in the reading (お客 + おきゃく → おきゃく)', () => {
+    expect(composeReading('お客', 'おきゃく')).toBe('おきゃく')
+  })
+
+  it('leaves an all-kanji surface unchanged (今日 + きょう → きょう)', () => {
+    expect(composeReading('今日', 'きょう')).toBe('きょう')
+  })
+
+  it('declines to compose across more than one kanji run (食べ物 keeps the ruby as-is)', () => {
+    expect(composeReading('食べ物', 'ふる')).toBe('ふる')
+  })
+
+  it('passes a Latin/romaji reading through untouched (沈ん + shizun → shizun)', () => {
+    expect(composeReading('沈ん', 'shizun')).toBe('shizun')
+  })
+
+  it('returns the reading unchanged when the surface has no kanji', () => {
+    expect(composeReading('に', 'に')).toBe('に')
+    expect(composeReading('', 'しず')).toBe('しず')
+  })
+
+  it('handles empty/undefined readings', () => {
+    expect(composeReading('沈ん', '')).toBe('')
+    expect(composeReading('沈ん', undefined)).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Okurigana across effectiveReading / isLineOutOfSync / generate / propagate
+// ---------------------------------------------------------------------------
+
+const sinkingSunCues = (ruby = 'しず') => [
+  cue('太陽', 'hira', 'たいよう'),
+  cue('が'),
+  cue('沈ん', 'hira', ruby),
+  cue('で'),
+  cue('いく'),
+]
+
+describe('okurigana line reconstruction', () => {
+  it('effectiveReading composes a kana ruby (沈ん/しず → しずん)', () => {
+    expect(effectiveReading(cue('沈ん', 'hira', 'しず'), 'hira')).toBe('しずん')
+  })
+
+  it('effectiveReading leaves a full romaji reading untouched (沈ん/shizun → shizun)', () => {
+    expect(effectiveReading(cue('沈ん', 'romaji', 'shizun'), 'romaji')).toBe('shizun')
+  })
+
+  it('generateLineFromCues folds okurigana into the whole line', () => {
+    expect(generateLineFromCues({ words: sinkingSunCues() }, 'hira', 'ja-Hrkt')).toBe(
+      'たいようがしずんでいく'
+    )
+  })
+
+  it('isLineOutOfSync is false when the line matches the okurigana-composed cues', () => {
+    const line = { words: sinkingSunCues(), transliteration: { hira: 'たいようがしずんでいく' } }
+    expect(isLineOutOfSync(line, 'hira')).toBe(false)
+  })
+
+  it('isLineOutOfSync is true against an okurigana-dropping line value', () => {
+    const line = { words: sinkingSunCues(), transliteration: { hira: 'たいようがしずでいく' } }
+    expect(isLineOutOfSync(line, 'hira')).toBe(true)
+  })
+
+  it('propagate rewrites the composed span when the ruby is edited (しず→しづ)', () => {
+    const result = propagateCueEditToLine(
+      'たいようがしずんでいく',
+      sinkingSunCues('しず'),
+      sinkingSunCues('しづ'),
+      'hira',
+      2
+    )
+    expect(result).toBe('たいようがしづんでいく')
   })
 })
