@@ -97,14 +97,14 @@
           class="whitespace-pre-wrap"
           :class="{
             'text-yellow-600 dark:text-yellow-300 font-bold': wordIndex === currentWordIndex,
-            'opacity-40': isFadedMainText,
+            'opacity-40': isFadedMainText && !isLinePlaying,
           }"
         >
           {{ word.text }}
         </span>
       </template>
       <template v-else>
-        <span :class="{ 'opacity-40': isFadedMainText }">{{ line.text || ' ' }}</span>
+        <span :class="{ 'opacity-40': isFadedMainText && !isLinePlaying }">{{ line.text || ' ' }}</span>
       </template>
     </div>
 
