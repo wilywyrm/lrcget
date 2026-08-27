@@ -101,6 +101,7 @@
             :value="selectedTransliterationSystem?.id ?? ''"
             @change="onSelectSystem"
           >
+            <option value="">No transliteration track selected</option>
             <option
               v-for="entry in declaredSystems"
               :key="entry.id"
@@ -1191,23 +1192,6 @@ watch(
     nextTick(() => {
       updateTimelineWidth()
     })
-  },
-  { immediate: true }
-)
-
-// When declared systems become available but nothing is selected yet, auto-select
-// the first one. This covers the case where a lyricsfile with transliterations
-// is opened and the parent hasn't propagated the initial selection yet.
-watch(
-  () => props.declaredTransliterations,
-  declared => {
-    if (
-      Array.isArray(declared) &&
-      declared.length > 0 &&
-      !props.selectedTransliterationSystem
-    ) {
-      emit('update:selected-transliteration-system', { ...declared[0] })
-    }
   },
   { immediate: true }
 )
