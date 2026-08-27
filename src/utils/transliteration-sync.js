@@ -247,3 +247,51 @@ export function generateLineFromCues(line, systemId, system) {
   const joined = parts.join('')
   return joined === '' ? undefined : joined
 }
+
+/**
+ * The character span [ci, cj) within a line-level reading that corresponds to the
+ * cue at `cueIndex`, for karaoke-style per-cue highlighting. Uses the same
+ * non-whitespace positional anchoring as propagation, so okurigana composes
+ * (沈ん→しずん) and romaji inter-word spaces sit OUTSIDE the highlighted span.
+ * Returns null when the line can't be aligned to the cues (out of sync) or the
+ * cue carries no reading — callers then render the reading with no highlight.
+ *
+ * @param {string} lineValue  the line-level reading string
+ * @param {Array}  words      the line's cue array
+ * @param {string} systemId   transliteration system id
+ * @param {number} cueIndex   the cue to locate within lineValue
+ * @returns {[number, number]|null} the [start, end) char slice, or null
+ */
+export function cueReadingSpanInLine(lineValue, words, systemId, cueIndex) {
+  if (typeof lineValue !== 'string' || lineValue === '') return null
+  if (
+    !Array.isArray(words) ||
+    !Number.isInteger(cueIndex) ||
+    cueIndex < 0 ||
+    cueIndex >= words.length
+  ) {
+    return null
+  }
+
+  const cur = stripWhitespace(effectiveReading(words[cueIndex], systemId))
+  if (cur === '') return null
+
+  const left = stripWhitespace(
+    words
+      .slice(0, cueIndex)
+      .map(word => effectiveReading(word, systemId))
+      .join('')
+  )
+  const right = stripWhitespace(
+    words
+      .slice(cueIndex + 1)
+      .map(word => effectiveReading(word, systemId))
+      .join('')
+  )
+
+  // Only highlight when the stripped line decomposes exactly into the cue
+  // readings (in sync); otherwise the mapping is unreliable, so return null.
+  if (stripWhitespace(lineValue) !== left + cur + right) return null
+
+  return nwsWindowToCharSlice(lineValue, left.length, left.length + cur.length)
+}

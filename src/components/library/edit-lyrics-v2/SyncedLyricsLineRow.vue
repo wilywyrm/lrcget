@@ -83,10 +83,11 @@
         :aria-label="hasWordSync ? 'Word synced' : 'Word not synced'"
       />
 
-      <!-- Active reading system with a line-level value: show that reading as a
-           single string (it is one string — no per-word highlighting). -->
+      <!-- Active reading system with a line-level value: show that reading, with
+           the currently-playing cue's span highlighted (karaoke) when in sync. -->
       <template v-if="showLineLevelReading">
-        <span class="whitespace-pre-wrap">{{ lineLevelReading }}</span>
+        <span v-if="lineLevelReadingParts" class="whitespace-pre-wrap"><span>{{ lineLevelReadingParts.before }}</span><span class="text-yellow-600 dark:text-yellow-300 font-bold">{{ lineLevelReadingParts.current }}</span><span>{{ lineLevelReadingParts.after }}</span></span>
+        <span v-else class="whitespace-pre-wrap">{{ lineLevelReading }}</span>
       </template>
       <!-- Otherwise show the main text. When a system is active but this line has
            no line-level reading yet, fade it to signal the missing reading. -->
@@ -180,6 +181,7 @@ import Rewind from '~icons/mdi/rewind'
 import Forward from '~icons/mdi/fast-forward'
 import Trash from '~icons/mdi/trash-can'
 import ArrowCollapseRight from '~icons/mdi/arrow-collapse-right'
+import { cueReadingSpanInLine } from '@/utils/transliteration-sync.js'
 import {
   syncedEditorShortcutBindings,
   withShortcutTitle,
@@ -403,6 +405,29 @@ const currentWordIndex = computed(() => {
   }
 
   return -1
+})
+
+// Karaoke highlight for the line-level reading: while the line plays, split it
+// around the currently-playing cue's span so that slice can take the yellow
+// highlight (mirroring the per-word main-text highlight). Null when not playing
+// or the line is out of sync — the template then renders the plain reading.
+const lineLevelReadingParts = computed(() => {
+  if (!showLineLevelReading.value || !isLinePlaying.value || currentWordIndex.value < 0) {
+    return null
+  }
+  const span = cueReadingSpanInLine(
+    lineLevelReading.value,
+    props.line?.words,
+    activeSystemId.value,
+    currentWordIndex.value
+  )
+  if (!span) return null
+  const reading = lineLevelReading.value
+  return {
+    before: reading.slice(0, span[0]),
+    current: reading.slice(span[0], span[1]),
+    after: reading.slice(span[1]),
+  }
 })
 
 defineExpose({

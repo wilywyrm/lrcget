@@ -7,6 +7,7 @@ import {
   propagateCueEditToLine,
   isLineOutOfSync,
   generateLineFromCues,
+  cueReadingSpanInLine,
 } from './transliteration-sync.js'
 
 // ---------------------------------------------------------------------------
@@ -357,5 +358,45 @@ describe('okurigana line reconstruction', () => {
       2
     )
     expect(result).toBe('たいようがしづんでいく')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// cueReadingSpanInLine (per-cue karaoke highlight span)
+// ---------------------------------------------------------------------------
+
+describe('cueReadingSpanInLine', () => {
+  it('spans the okurigana-composed reading of a middle cue (沈ん → しずん)', () => {
+    expect(cueReadingSpanInLine('たいようがしずんでいく', sinkingSunCues(), 'hira', 2)).toEqual([5, 8])
+  })
+
+  it('spans the first cue', () => {
+    expect(cueReadingSpanInLine('たいようがしずんでいく', sinkingSunCues(), 'hira', 0)).toEqual([0, 4])
+  })
+
+  it('spans a kana cue that reads as itself (が)', () => {
+    expect(cueReadingSpanInLine('たいようがしずんでいく', sinkingSunCues(), 'hira', 1)).toEqual([4, 5])
+  })
+
+  it('spans the last cue', () => {
+    expect(cueReadingSpanInLine('たいようがしずんでいく', sinkingSunCues(), 'hira', 4)).toEqual([9, 11])
+  })
+
+  it('keeps romaji inter-word spaces OUTSIDE the highlighted span', () => {
+    expect(cueReadingSpanInLine('otona ni naru', romajiWords(), 'romaji', 1)).toEqual([6, 8])
+  })
+
+  it('spans the first romaji cue', () => {
+    expect(cueReadingSpanInLine('otona ni naru', romajiWords(), 'romaji', 0)).toEqual([0, 5])
+  })
+
+  it('returns null when the line is out of sync with the cues', () => {
+    expect(cueReadingSpanInLine('completely different', romajiWords(), 'romaji', 1)).toBeNull()
+  })
+
+  it('returns null for an empty line, out-of-range index, or empty cue reading', () => {
+    expect(cueReadingSpanInLine('', sinkingSunCues(), 'hira', 2)).toBeNull()
+    expect(cueReadingSpanInLine('たいようがしずんでいく', sinkingSunCues(), 'hira', 9)).toBeNull()
+    expect(cueReadingSpanInLine('た', [cue('')], 'hira', 0)).toBeNull()
   })
 })
