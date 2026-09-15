@@ -6,7 +6,7 @@ fn verify_nonce(result: &Vec<u8>, target: &Vec<u8>) -> bool {
         return false;
     }
 
-    for i in 0..(result.len() - 1) {
+    for i in 0..result.len() {
         if result[i] > target[i] {
             return false;
         } else if result[i] < target[i] {
