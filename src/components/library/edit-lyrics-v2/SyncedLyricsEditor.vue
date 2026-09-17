@@ -13,6 +13,9 @@
       @play-line="handlePlayLine"
       @play-line-at-offset="handlePlayLineAtOffset"
       @select-next-line="selectLine"
+      @rewind-line="handleRewindLine"
+      @forward-end="handleForwardEnd"
+      @set-line-end="handleSetLineEnd"
       @seek="$emit('seek', $event)"
     />
 
@@ -181,6 +184,7 @@ const emit = defineEmits([
   'sync-end-to-next',
   'rewind-end',
   'forward-end',
+  'set-line-end',
   'delete-line',
   'bulk-rewind-lines',
   'bulk-forward-lines',
@@ -505,6 +509,10 @@ const handleWordsUpdate = ({ lineIndex, words, lineStartMs }) => {
 
 const handleWordTimingEdited = ({ lineIndex, startMs }) => {
   emit('word-timing-edited', { lineIndex, startMs })
+}
+
+const handleSetLineEnd = ({ lineIndex, endMs }) => {
+  emit('set-line-end', { lineIndex, endMs })
 }
 
 const hasSelectedLine = computed(

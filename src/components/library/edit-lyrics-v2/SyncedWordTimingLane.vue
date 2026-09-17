@@ -131,7 +131,7 @@
         />
 
         <button
-          v-for="index in boundaryIndexes"
+          v-for="index in interiorBoundaryIndexes"
           :key="`boundary-${index}`"
           type="button"
           class="group absolute top-0 bottom-0 z-30 -ml-2 w-4 cursor-ew-resize bg-transparent"
@@ -161,6 +161,43 @@
           </div>
         </div>
 
+        <div
+          v-if="endDragState"
+          class="absolute inset-y-0 z-20 pointer-events-none"
+          :style="{ left: `${timeToPercent(endDragState.currentEndMs)}%` }"
+        >
+          <div
+            class="absolute top-0 bottom-0 w-[3px] -translate-x-1/2 bg-neutral-600 dark:bg-neutral-300 ring-1 ring-neutral-500/25"
+          />
+          <div
+            class="absolute top-[-0.375rem] left-0 -translate-x-1/2 -translate-y-full px-[0.4rem] py-0.5 rounded-full text-xs leading-4 whitespace-nowrap text-neutral-800 bg-neutral-200 dark:text-white dark:bg-hoa-1100"
+          >
+            {{ formatTimestampMs(endDragState.currentEndMs) }}
+          </div>
+        </div>
+
+        <button
+          v-if="displayedWords.length > 0"
+          type="button"
+          class="button button-primary absolute left-0 top-0 bottom-0 z-40 w-3.5 p-0 rounded-l cursor-ew-resize"
+          title="Nudge line + first word start earlier (drag to trim)"
+          @pointerdown="handleBoundaryPointerDown(0, $event)"
+          @click.stop="handleExpandStartClick"
+        >
+          <ChevronLeft class="w-3 h-3" />
+        </button>
+
+        <button
+          v-if="displayedWords.length > 0"
+          type="button"
+          class="button button-primary absolute right-0 top-0 bottom-0 z-40 w-3.5 p-0 rounded-r cursor-ew-resize"
+          title="Nudge line + last word end later (drag to trim)"
+          @pointerdown="handleEndPointerDown"
+          @click.stop="handleExpandEndClick"
+        >
+          <ChevronRight class="w-3 h-3" />
+        </button>
+
       </div>
 
       <!-- Playhead is a sibling of the spectrogram + timeline so its top
@@ -188,10 +225,13 @@ import Play from '~icons/mdi/play'
 import Close from '~icons/mdi/close'
 import Waveform from '~icons/mdi/waveform'
 import EyeOff from '~icons/mdi/eye-off'
+import ChevronLeft from '~icons/mdi/chevron-left'
+import ChevronRight from '~icons/mdi/chevron-right'
 import { useGlobalState } from '@/composables/global-state.js'
 import SpectrogramPanel from '@/components/library/edit-lyrics-v2/SpectrogramPanel.vue'
 import SyncedWordTimingSegment from '@/components/library/edit-lyrics-v2/SyncedWordTimingSegment.vue'
 import { useEditLyricsV2WordBoundaryDrag } from '@/composables/edit-lyrics-v2/useEditLyricsV2WordBoundaryDrag.js'
+import { useEditLyricsV2LineEndDrag } from '@/composables/edit-lyrics-v2/useEditLyricsV2LineEndDrag.js'
 import { useEditLyricsV2WordTimingHotkeys } from '@/composables/edit-lyrics-v2/useEditLyricsV2WordTimingHotkeys.js'
 import { resolveWordSplitTimeMs } from '@/utils/word-split.js'
 import {
@@ -229,7 +269,16 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['update:words', 'word-timing-edited', 'play-line', 'select-next-line', 'seek'])
+const emit = defineEmits([
+  'update:words',
+  'word-timing-edited',
+  'play-line',
+  'select-next-line',
+  'seek',
+  'rewind-line',
+  'forward-end',
+  'set-line-end',
+])
 
 const { spectrogramVisible, toggleSpectrogramVisible } = useGlobalState()
 
@@ -349,6 +398,7 @@ const {
   boundaryIndexes,
   selectedBoundaryIndex,
   selectedBoundaryIndices,
+  isDraggingBoundary,
   startBoundaryDrag,
   selectBoundary,
   isBoundarySelected,
@@ -368,6 +418,20 @@ const {
   onUpdateWords: payload => emit('update:words', payload),
   onWordTimingEdited: payload => emit('word-timing-edited', payload),
 })
+
+const { endDragState, isDraggingEnd, startEndDrag, cancelEndDrag } = useEditLyricsV2LineEndDrag({
+  isWordSyncAvailable,
+  words,
+  lineStartMs,
+  lineEndMs: laneEndMs,
+  selectedLineIndex: computed(() => props.selectedLineIndex),
+  onCommitLineEnd: payload => emit('set-line-end', payload),
+  onLineEndEdited: payload => emit('word-timing-edited', payload),
+})
+
+const interiorBoundaryIndexes = computed(() =>
+  boundaryIndexes.value.filter(index => index > 0)
+)
 
 const playheadPercent = computed(() => {
   if (!isWordSyncAvailable.value) return 0
@@ -417,6 +481,11 @@ const clientXToTime = clientX => {
 
 const getWordEndMs = index => {
   if (index >= displayedWords.value.length - 1) {
+    // While trimming the right edge, the last word follows the drag preview so
+    // its segment shrinks live before the commit lands.
+    if (endDragState.value) {
+      return endDragState.value.currentEndMs
+    }
     return laneEndMs.value
   }
 
@@ -426,6 +495,24 @@ const getWordEndMs = index => {
 
 const handleBoundaryPointerDown = (rightWordIndex, event) => {
   startBoundaryDrag(rightWordIndex, event, clientXToTime)
+}
+
+const handleEndPointerDown = event => {
+  startEndDrag(event, clientXToTime)
+}
+
+const handleExpandStartClick = () => {
+  if (isDraggingBoundary.value || !isWordSyncAvailable.value) {
+    return
+  }
+  emit('rewind-line', props.selectedLineIndex)
+}
+
+const handleExpandEndClick = () => {
+  if (isDraggingEnd.value || !isWordSyncAvailable.value) {
+    return
+  }
+  emit('forward-end', props.selectedLineIndex)
 }
 
 const getBoundaryLineClass = index => {
@@ -618,6 +705,7 @@ watch(
   ],
   ([newIndex], [oldIndex] = []) => {
     cancelBoundaryInteraction()
+    cancelEndDrag()
     // Only reset boundary index when actually moving to a different line.
     if (newIndex !== oldIndex) {
       resetBoundarySelection()
@@ -677,6 +765,7 @@ watch(
 watch(isWordSyncAvailable, (available, wasAvailable) => {
   if (!available) {
     cancelBoundaryInteraction()
+    cancelEndDrag()
     segmentedTokenTexts.value = null
     return
   }
@@ -724,6 +813,9 @@ watch(
     if (dragState.value) {
       cancelBoundaryInteraction()
     }
+    if (endDragState.value) {
+      cancelEndDrag()
+    }
   },
   { deep: true }
 )
@@ -735,6 +827,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   cancelBoundaryInteraction()
+  cancelEndDrag()
   window.removeEventListener('resize', updateTimelineWidth)
   unbindWordTimingHotkeys()
 })

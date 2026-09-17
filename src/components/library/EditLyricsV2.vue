@@ -122,6 +122,7 @@
         @sync-end-to-next="syncEndToNextLineStart"
         @rewind-end="rewindEndBy100"
         @forward-end="forwardEndBy100"
+        @set-line-end="handleSetLineEnd"
         @delete-line="deleteSyncedLine"
         @bulk-rewind-lines="bulkRewindLines"
         @bulk-forward-lines="bulkForwardLines"
@@ -248,6 +249,7 @@ const {
   syncEndToCurrentProgress,
   rewindEndBy100,
   forwardEndBy100,
+  setLineEndMsTo,
   syncEndToNextLineStart,
   saveLyrics,
   ensureSelectedSyncedLine,
@@ -303,6 +305,10 @@ const rewindLineBy100 = lineIndex => {
 const forwardLineBy100 = lineIndex => {
   forwardLineTimestampBy100(lineIndex)
   void playLine(lineIndex)
+}
+
+const handleSetLineEnd = ({ lineIndex, endMs }) => {
+  setLineEndMsTo(lineIndex, endMs)
 }
 
 const handleUpdateLineText = (lineIndex, newText) => {

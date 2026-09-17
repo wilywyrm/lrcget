@@ -475,6 +475,22 @@ export function useEditLyricsV2Document({ audioSource, lyricsfile, trackId, prog
     shiftEndTimestampBy(lineIndex, 100)
   }
 
+  // Set a line end to an explicit value (word-lane right-edge trim drag).
+  // Routes through setLineEndMs so the last word's explicit end stays locked.
+  const setLineEndMsTo = (lineIndex, endMs) => {
+    if (!Number.isInteger(lineIndex) || lineIndex < 0 || lineIndex >= syncedLines.value.length) {
+      return
+    }
+
+    if (!Number.isFinite(endMs)) {
+      return
+    }
+
+    const newEndMs = Math.max(0, Math.round(endMs))
+
+    withUpdatedLine(lineIndex, line => setLineEndMs(line, newEndMs))
+  }
+
   const updateLineText = (lineIndex, newText) => {
     if (!Number.isInteger(lineIndex) || lineIndex < 0 || lineIndex >= syncedLines.value.length) {
       return
@@ -635,6 +651,7 @@ export function useEditLyricsV2Document({ audioSource, lyricsfile, trackId, prog
     syncEndToCurrentProgress,
     rewindEndBy100,
     forwardEndBy100,
+    setLineEndMsTo,
     syncEndToNextLineStart,
     saveLyrics,
     ensureSelectedSyncedLine,
