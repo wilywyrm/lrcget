@@ -26,6 +26,8 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import FFT from 'fft.js'
+import { interpolateInferno } from 'd3-scale-chromatic'
 
 const props = defineProps({
   filePath: { type: String, default: null },
@@ -81,46 +83,6 @@ const DYNAMIC_RANGE_DB = 70
 const DISPLAY_MIN_HZ = 50
 const DISPLAY_MAX_HZ = 8000
 
-// In-place radix-2 Cooley-Tukey FFT. Length must be a power of two.
-const fftInPlace = (real, imag) => {
-  const n = real.length
-  let j = 0
-  for (let i = 1; i < n; i++) {
-    let bit = n >> 1
-    while (j & bit) {
-      j ^= bit
-      bit >>= 1
-    }
-    j ^= bit
-    if (i < j) {
-      let t = real[i]
-      real[i] = real[j]
-      real[j] = t
-      t = imag[i]
-      imag[i] = imag[j]
-      imag[j] = t
-    }
-  }
-  for (let len = 2; len <= n; len <<= 1) {
-    const half = len >> 1
-    const step = (-2 * Math.PI) / len
-    for (let i = 0; i < n; i += len) {
-      for (let k = 0; k < half; k++) {
-        const angle = step * k
-        const cos = Math.cos(angle)
-        const sin = Math.sin(angle)
-        const idx = i + k + half
-        const tr = real[idx] * cos - imag[idx] * sin
-        const ti = real[idx] * sin + imag[idx] * cos
-        real[idx] = real[i + k] - tr
-        imag[idx] = imag[i + k] - ti
-        real[i + k] = real[i + k] + tr
-        imag[i + k] = imag[i + k] + ti
-      }
-    }
-  }
-}
-
 const computeSpectrogram = (samples, sampleRate) => {
   const win = new Float32Array(FFT_SIZE)
   for (let i = 0; i < FFT_SIZE; i++) {
@@ -130,20 +92,26 @@ const computeSpectrogram = (samples, sampleRate) => {
   const totalFrames = Math.max(1, Math.floor((samples.length - FFT_SIZE) / HOP) + 1)
   const binCount = FFT_SIZE / 2
 
+  // fft.js radix-4 real-input transform. realTransform() fills the left half of
+  // `spectrum` (the non-redundant bins 0..binCount-1) with interleaved [re, im]
+  // pairs — exactly the bins we render — so completeSpectrum() is unnecessary.
+  const fft = new FFT(FFT_SIZE)
+  const input = new Float32Array(FFT_SIZE)
+  const spectrum = fft.createComplexArray()
+
   const frames = new Array(totalFrames)
-  const real = new Float32Array(FFT_SIZE)
-  const imag = new Float32Array(FFT_SIZE)
 
   for (let frame = 0; frame < totalFrames; frame++) {
     const offset = frame * HOP
     for (let i = 0; i < FFT_SIZE; i++) {
-      real[i] = (samples[offset + i] || 0) * win[i]
-      imag[i] = 0
+      input[i] = (samples[offset + i] || 0) * win[i]
     }
-    fftInPlace(real, imag)
+    fft.realTransform(spectrum, input)
     const mags = new Float32Array(binCount)
     for (let b = 0; b < binCount; b++) {
-      const mag = Math.sqrt(real[b] * real[b] + imag[b] * imag[b])
+      const re = spectrum[2 * b]
+      const im = spectrum[2 * b + 1]
+      const mag = Math.sqrt(re * re + im * im)
       mags[b] = mag > 1e-9 ? 20 * Math.log10(mag) : -180
     }
     frames[frame] = mags
@@ -151,32 +119,20 @@ const computeSpectrogram = (samples, sampleRate) => {
   return { frames, binCount, sampleRate }
 }
 
-// 5-stop inferno approximation (black → purple → red → orange → pale yellow).
-// Cheap enough to recompute per pixel.
-const inferno = t => {
-  const stops = [
-    [0.0, 0, 0, 4],
-    [0.25, 101, 21, 110],
-    [0.5, 212, 72, 66],
-    [0.75, 250, 193, 39],
-    [1.0, 252, 255, 164],
-  ]
-  if (t <= 0) return [stops[0][1], stops[0][2], stops[0][3]]
-  if (t >= 1) return [stops[4][1], stops[4][2], stops[4][3]]
-  for (let i = 1; i < stops.length; i++) {
-    if (t <= stops[i][0]) {
-      const lo = stops[i - 1]
-      const hi = stops[i]
-      const local = (t - lo[0]) / (hi[0] - lo[0])
-      return [
-        Math.round(lo[1] + (hi[1] - lo[1]) * local),
-        Math.round(lo[2] + (hi[2] - lo[2]) * local),
-        Math.round(lo[3] + (hi[3] - lo[3]) * local),
-      ]
-    }
+// Accurate matplotlib "inferno" colormap (via d3-scale-chromatic), precomputed
+// once into a 256-entry RGB lookup table. interpolateInferno returns a "#rrggbb"
+// hex string, so we parse it to bytes here and index the table by the normalized
+// magnitude in the render hot loop (see renderToCanvas).
+const INFERNO_LUT = (() => {
+  const lut = new Uint8Array(256 * 3)
+  for (let i = 0; i < 256; i++) {
+    const hex = interpolateInferno(i / 255)
+    lut[i * 3] = parseInt(hex.slice(1, 3), 16)
+    lut[i * 3 + 1] = parseInt(hex.slice(3, 5), 16)
+    lut[i * 3 + 2] = parseInt(hex.slice(5, 7), 16)
   }
-  return [stops[4][1], stops[4][2], stops[4][3]]
-}
+  return lut
+})()
 
 const renderToCanvas = (canvas, frames, binCount, sampleRate) => {
   if (!canvas || frames.length === 0) return
@@ -227,11 +183,11 @@ const renderToCanvas = (canvas, frames, binCount, sampleRate) => {
     for (let y = 0; y < pxHeight; y++) {
       const db = frame[yToBin[y]]
       const t = Math.max(0, Math.min(1, (db - floorDb) / DYNAMIC_RANGE_DB))
-      const [r, g, b] = inferno(t)
+      const lutIdx = Math.round(t * 255) * 3
       const offset = (y * pxWidth + x) * 4
-      data[offset] = r
-      data[offset + 1] = g
-      data[offset + 2] = b
+      data[offset] = INFERNO_LUT[lutIdx]
+      data[offset + 1] = INFERNO_LUT[lutIdx + 1]
+      data[offset + 2] = INFERNO_LUT[lutIdx + 2]
       data[offset + 3] = 255
     }
   }
