@@ -45,15 +45,59 @@
         </div>
 
         <div class="flex items-center gap-2">
-          <button
-            v-if="filePath"
-            class="button button-normal rounded-full h-6 w-6 flex items-center justify-center"
-            :title="spectrogramVisible ? 'Hide spectrogram' : 'Show spectrogram'"
-            @click="toggleSpectrogramVisible"
-          >
-            <Waveform v-if="spectrogramVisible" class="w-3.5 h-3.5" />
-            <EyeOff v-else class="w-3.5 h-3.5" />
-          </button>
+          <div v-if="filePath" class="flex items-center">
+            <button
+              class="button button-normal h-6 w-6 rounded-l-full rounded-r-none border-r border-neutral-300 dark:border-neutral-700 flex items-center justify-center"
+              :title="spectrogramVisible ? 'Hide spectrogram' : 'Show spectrogram'"
+              @click="toggleSpectrogramVisible"
+            >
+              <Waveform v-if="spectrogramVisible" class="w-3.5 h-3.5" />
+              <EyeOff v-else class="w-3.5 h-3.5" />
+            </button>
+
+            <VDropdown theme="lrcget-dropdown" placement="bottom-end">
+              <button
+                type="button"
+                class="button button-normal h-6 w-5 rounded-r-full rounded-l-none flex items-center justify-center"
+                title="Spectrogram colour theme"
+                aria-label="Spectrogram colour theme"
+                aria-haspopup="menu"
+              >
+                <ChevronDown class="w-3 h-3" />
+              </button>
+
+              <template #popper>
+                <div class="theme-menu" role="menu" aria-label="Spectrogram colour theme">
+                  <button
+                    v-for="theme in SPECTROGRAM_THEMES"
+                    :key="theme.id"
+                    v-close-popper
+                    type="button"
+                    role="menuitemradio"
+                    :aria-checked="isSpectrogramThemeSelected(theme.id)"
+                    :aria-label="theme.label"
+                    :title="theme.label"
+                    class="theme-option"
+                    :class="{ 'theme-option-selected': isSpectrogramThemeSelected(theme.id) }"
+                    @click="handleSelectSpectrogramTheme(theme.id)"
+                  >
+                    <span
+                      class="h-4 w-4 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/15"
+                      :style="{
+                        backgroundImage: `linear-gradient(to right, ${theme.floorColor}, ${theme.peakColor})`,
+                      }"
+                      aria-hidden="true"
+                    />
+                    <Check
+                      v-if="isSpectrogramThemeSelected(theme.id)"
+                      class="text-base"
+                      aria-hidden="true"
+                    />
+                  </button>
+                </div>
+              </template>
+            </VDropdown>
+          </div>
           <button
             class="button button-normal text-xs px-2 py-1 rounded flex items-center gap-1"
             :title="playLineTitle"
@@ -87,6 +131,7 @@
         :file-path="filePath"
         :start-ms="laneStartMs"
         :end-ms="laneEndMs"
+        :theme="spectrogramTheme"
         class="mb-2 shrink-0"
         @seek="$emit('seek', $event)"
       />
@@ -223,8 +268,10 @@ import { invoke } from '@tauri-apps/api/core'
 import Equal from '~icons/mdi/equal'
 import Play from '~icons/mdi/play'
 import Close from '~icons/mdi/close'
+import Check from '~icons/mdi/check'
 import Waveform from '~icons/mdi/waveform'
 import EyeOff from '~icons/mdi/eye-off'
+import ChevronDown from '~icons/mdi/chevron-down'
 import ChevronLeft from '~icons/mdi/chevron-left'
 import ChevronRight from '~icons/mdi/chevron-right'
 import { useGlobalState } from '@/composables/global-state.js'
@@ -240,6 +287,7 @@ import {
   withShortcutTitle,
 } from '@/composables/edit-lyrics-v2/shortcutRegistry.js'
 import { formatTimestampMs } from '@/utils/lyricsfile.js'
+import { SPECTROGRAM_THEMES } from '@/utils/spectrogram-themes.js'
 import { ensureLineWords, distributeWordTimings, hasValidWords } from '@/utils/word-tokenizer.js'
 
 const props = defineProps({
@@ -280,7 +328,20 @@ const emit = defineEmits([
   'set-line-end',
 ])
 
-const { spectrogramVisible, toggleSpectrogramVisible } = useGlobalState()
+const {
+  spectrogramVisible,
+  toggleSpectrogramVisible,
+  showSpectrogram,
+  spectrogramTheme,
+  selectSpectrogramTheme,
+} = useGlobalState()
+
+const isSpectrogramThemeSelected = themeId => spectrogramTheme.value === themeId
+
+const handleSelectSpectrogramTheme = async themeId => {
+  await selectSpectrogramTheme(themeId)
+  await showSpectrogram()
+}
 
 const timelineElement = ref(null)
 const timelineWidth = ref(0)
@@ -832,3 +893,21 @@ onUnmounted(() => {
   unbindWordTimingHotkeys()
 })
 </script>
+
+<style scoped>
+.theme-menu {
+  @apply w-[4.5rem] p-1;
+}
+
+.theme-option {
+  @apply flex h-8 w-full items-center justify-between rounded px-2 text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-700;
+}
+
+.theme-option-selected {
+  @apply bg-hoa-100/60 text-hoa-1500 hover:bg-hoa-100 dark:bg-hoa-1100/15 dark:text-hoa-700 dark:hover:bg-hoa-1100/25;
+}
+
+.theme-option:focus-visible {
+  @apply outline-none ring-2 ring-inset ring-hoa-1100;
+}
+</style>

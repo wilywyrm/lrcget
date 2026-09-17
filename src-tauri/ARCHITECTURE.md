@@ -106,7 +106,9 @@ trait ServiceAccess {
 - `artists_fts` — indexed `artist_name` (with `artist_id` as UNINDEXED key)
 - Backfilled from existing normalized `*_lower` columns.
 
-**Migration v17:** Added `spectrogram_visible` BOOLEAN column to `config_data` (default `1`) for persisting the V2 lyrics editor's per-line spectrogram show/hide toggle across app launches.
+**Migration v18:** Added `spectrogram_visible` BOOLEAN column to `config_data` (default `1`) for persisting the V2 lyrics editor's per-line spectrogram show/hide toggle across app launches. (Authored as v17 on the spectrogram branch; renumbered to v18 once `main`'s v17 export-preferences migration merged in, so directory order matches applied-version order.)
+
+**Migration v19:** Added `spectrogram_theme` TEXT column to `config_data` (`NOT NULL DEFAULT 'inferno'`) for persisting the V2 editor's spectrogram colour theme (`inferno` | `blue` | `green`). Unknown or legacy values are normalized back to `inferno` by the frontend theme registry rather than failing to render.
 
 **Indexes:** All `*_lower` columns + `content_hash`, `scan_status`, `modified_time+file_size` (fingerprint) + lyrics-presence indexes + LRCLIB composite index (`lrclib_instance`, `lrclib_id`)
 
@@ -332,7 +334,7 @@ Search across all three entity types uses SQLite FTS5 (via `tracks_fts`, `albums
 - `play_track(track_id?, file_path?, title?, album_name?, artist_name?, album_artist_name?, duration?)` - Unified playback for both library tracks (via `track_id`) and file-based tracks (via `file_path` with metadata)
 - `pause/resume_track()`, `seek_track()`, `stop_track()`, `set_volume()` (persists volume to config), `set_playback_speed()`
 - `get_audio_slice(file_path, start_ms, end_ms)` - Returns `{samples: Vec<f32>, sampleRate: u32}` (camelCase). Decodes a mono-downmixed slice.
-- `set_spectrogram_visible(visible)`
+- `set_spectrogram_visible(visible)`, `set_spectrogram_theme(theme)`
 - `get/set_directories()`, `get/set_config()`, `get_init()`
 - `set_export_preferences(auto_export_enabled?, export_lrc?, export_txt?, export_embedded?, skip_tracks_with_synced_lyrics?, skip_tracks_with_plain_lyrics?)` updates only supplied fields in `config_data` and returns config. Download atomically supplies its existing skip flags, toggle, and effective format selections; manual Export supplies shared formats only. Hidden/omitted fields and unrelated settings survive.
 - Volume is loaded from config on startup and auto-saved when changed via `set_volume()`

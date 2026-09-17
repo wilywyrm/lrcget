@@ -1562,6 +1562,14 @@ fn set_spectrogram_visible(visible: bool, app_handle: AppHandle) -> Result<(), S
 }
 
 #[tauri::command]
+fn set_spectrogram_theme(theme: String, app_handle: AppHandle) -> Result<(), String> {
+    app_handle
+        .db(|db| db::set_spectrogram_theme_config(&theme, db))
+        .map_err(|err| err.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 fn set_volume(
     volume: f64,
     app_state: tauri::State<AppState>,
@@ -1683,6 +1691,7 @@ async fn main() {
             set_volume,
             set_playback_speed,
             set_spectrogram_visible,
+            set_spectrogram_theme,
             open_devtools,
             drain_notifications,
             find_matching_tracks,

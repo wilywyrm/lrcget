@@ -27,13 +27,18 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import FFT from 'fft.js'
-import { interpolateInferno } from 'd3-scale-chromatic'
+import {
+  DEFAULT_SPECTROGRAM_THEME_ID,
+  SPECTROGRAM_LUT_SIZE,
+  getSpectrogramLut,
+} from '@/utils/spectrogram-themes.js'
 
 const props = defineProps({
   filePath: { type: String, default: null },
   startMs: { type: Number, default: 0 },
   endMs: { type: Number, default: 0 },
   height: { type: Number, default: 96 },
+  theme: { type: String, default: DEFAULT_SPECTROGRAM_THEME_ID },
 })
 
 const canvasEl = ref(null)
@@ -119,23 +124,10 @@ const computeSpectrogram = (samples, sampleRate) => {
   return { frames, binCount, sampleRate }
 }
 
-// Accurate matplotlib "inferno" colormap (via d3-scale-chromatic), precomputed
-// once into a 256-entry RGB lookup table. interpolateInferno returns a "#rrggbb"
-// hex string, so we parse it to bytes here and index the table by the normalized
-// magnitude in the render hot loop (see renderToCanvas).
-const INFERNO_LUT = (() => {
-  const lut = new Uint8Array(256 * 3)
-  for (let i = 0; i < 256; i++) {
-    const hex = interpolateInferno(i / 255)
-    lut[i * 3] = parseInt(hex.slice(1, 3), 16)
-    lut[i * 3 + 1] = parseInt(hex.slice(3, 5), 16)
-    lut[i * 3 + 2] = parseInt(hex.slice(5, 7), 16)
-  }
-  return lut
-})()
-
 const renderToCanvas = (canvas, frames, binCount, sampleRate) => {
   if (!canvas || frames.length === 0) return
+
+  const lut = getSpectrogramLut(props.theme)
 
   const cssWidth = canvas.clientWidth
   const cssHeight = canvas.clientHeight
@@ -183,11 +175,11 @@ const renderToCanvas = (canvas, frames, binCount, sampleRate) => {
     for (let y = 0; y < pxHeight; y++) {
       const db = frame[yToBin[y]]
       const t = Math.max(0, Math.min(1, (db - floorDb) / DYNAMIC_RANGE_DB))
-      const lutIdx = Math.round(t * 255) * 3
+      const lutIdx = Math.round(t * (SPECTROGRAM_LUT_SIZE - 1)) * 3
       const offset = (y * pxWidth + x) * 4
-      data[offset] = INFERNO_LUT[lutIdx]
-      data[offset + 1] = INFERNO_LUT[lutIdx + 1]
-      data[offset + 2] = INFERNO_LUT[lutIdx + 2]
+      data[offset] = lut[lutIdx]
+      data[offset + 1] = lut[lutIdx + 1]
+      data[offset + 2] = lut[lutIdx + 2]
       data[offset + 3] = 255
     }
   }
@@ -260,6 +252,16 @@ watch(
   () => [props.filePath, props.startMs, props.endMs],
   () => scheduleRefresh(),
   { immediate: false }
+)
+
+// FFT frames are theme-independent, so a theme switch recolours the cached
+// result in place instead of re-fetching audio and recomputing the transform.
+watch(
+  () => props.theme,
+  () => {
+    const cached = cacheKey.value ? cache.get(cacheKey.value) : null
+    if (cached) renderToCanvas(canvasEl.value, cached.frames, cached.binCount, cached.sampleRate)
+  }
 )
 
 let resizeObserver = null

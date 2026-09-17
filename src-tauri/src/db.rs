@@ -164,6 +164,7 @@ pub fn get_config(db: &Connection) -> Result<PersistentConfig> {
         lrclib_instance,
         volume,
         spectrogram_visible,
+        spectrogram_theme,
         auto_export_enabled,
         export_lrc,
         export_txt,
@@ -185,6 +186,7 @@ pub fn get_config(db: &Connection) -> Result<PersistentConfig> {
             lrclib_instance: r.get("lrclib_instance")?,
             volume: r.get("volume")?,
             spectrogram_visible: r.get("spectrogram_visible")?,
+            spectrogram_theme: r.get("spectrogram_theme")?,
         })
     })?;
     Ok(row)
@@ -274,6 +276,12 @@ pub fn set_volume_config(volume: f64, db: &Connection) -> Result<()> {
 pub fn set_spectrogram_visible_config(visible: bool, db: &Connection) -> Result<()> {
     let mut statement = db.prepare("UPDATE config_data SET spectrogram_visible = ? WHERE 1")?;
     statement.execute([visible])?;
+    Ok(())
+}
+
+pub fn set_spectrogram_theme_config(theme: &str, db: &Connection) -> Result<()> {
+    let mut statement = db.prepare("UPDATE config_data SET spectrogram_theme = ? WHERE 1")?;
+    statement.execute([theme])?;
     Ok(())
 }
 

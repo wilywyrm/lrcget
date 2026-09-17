@@ -46,7 +46,8 @@ import { useToast } from 'vue-toastification'
 
 const appWindow = getCurrentWebviewWindow()
 const toast = useToast()
-const { themeMode, setThemeMode, setLrclibInstance, setSpectrogramVisible } = useGlobalState()
+const { themeMode, setThemeMode, setLrclibInstance, setSpectrogramVisible, setSpectrogramTheme } =
+  useGlobalState()
 const { downloadNext } = useDownloader()
 const { exportNext } = useExporter()
 const { setVolume } = usePlayer()
@@ -98,6 +99,7 @@ const loadGlobalState = async () => {
   setThemeMode(config.theme_mode)
   setLrclibInstance(config.lrclib_instance)
   setSpectrogramVisible(config.spectrogram_visible ?? true)
+  setSpectrogramTheme(config.spectrogram_theme)
   // Set initial volume from config (default to 1.0 if not set)
   const volume = config.volume !== undefined ? config.volume : 1.0
   setVolume(volume)

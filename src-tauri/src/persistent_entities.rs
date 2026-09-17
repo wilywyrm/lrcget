@@ -94,4 +94,5 @@ pub struct PersistentConfig {
     pub lrclib_instance: String,
     pub volume: f64,
     pub spectrogram_visible: bool,
+    pub spectrogram_theme: String,
 }
