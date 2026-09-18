@@ -86,11 +86,6 @@
                       :style="{ backgroundColor: theme.swatchColor }"
                       aria-hidden="true"
                     />
-                    <Check
-                      v-if="isSpectrogramThemeSelected(theme.id)"
-                      class="text-base"
-                      aria-hidden="true"
-                    />
                   </button>
                 </div>
               </template>
@@ -267,7 +262,6 @@ import { invoke } from '@tauri-apps/api/core'
 import Equal from '~icons/mdi/equal'
 import Play from '~icons/mdi/play'
 import Close from '~icons/mdi/close'
-import Check from '~icons/mdi/check'
 import Waveform from '~icons/mdi/waveform'
 import EyeOff from '~icons/mdi/eye-off'
 import ChevronDown from '~icons/mdi/chevron-down'
@@ -897,15 +891,15 @@ onUnmounted(() => {
 
 <style scoped>
 .theme-menu {
-  @apply w-[4.5rem] p-1;
+  @apply w-11 p-1;
 }
 
 .theme-option {
-  @apply flex h-8 w-full items-center justify-between rounded px-2 text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-700;
+  @apply flex h-8 w-full items-center justify-center rounded hover:bg-neutral-100 dark:hover:bg-neutral-700;
 }
 
 .theme-option-selected {
-  @apply bg-hoa-100/60 text-hoa-1500 hover:bg-hoa-100 dark:bg-hoa-1100/15 dark:text-hoa-700 dark:hover:bg-hoa-1100/25;
+  @apply bg-hoa-100/60 hover:bg-hoa-100 dark:bg-hoa-1100/15 dark:hover:bg-hoa-1100/25;
 }
 
 .theme-option:focus-visible {
