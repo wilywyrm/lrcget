@@ -224,7 +224,7 @@
           v-if="displayedWords.length > 0"
           type="button"
           class="button button-primary absolute left-0 top-0 bottom-0 z-40 w-3.5 p-0 rounded-l cursor-ew-resize"
-          title="Nudge line + first word start earlier (drag to trim)"
+          title="Nudge line start earlier (drag to trim)"
           @pointerdown="handleBoundaryPointerDown(0, $event)"
           @click.stop="handleExpandStartClick"
         >
@@ -235,7 +235,7 @@
           v-if="displayedWords.length > 0"
           type="button"
           class="button button-primary absolute right-0 top-0 bottom-0 z-40 w-3.5 p-0 rounded-r cursor-ew-resize"
-          title="Nudge line + last word end later (drag to trim)"
+          title="Nudge line end later (drag to trim)"
           @pointerdown="handleEndPointerDown"
           @click.stop="handleExpandEndClick"
         >
