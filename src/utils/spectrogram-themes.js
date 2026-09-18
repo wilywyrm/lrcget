@@ -28,16 +28,32 @@ const buildLut = interpolate => {
 const cssRgbAt = (lut, index) =>
   `rgb(${lut[index * 3]}, ${lut[index * 3 + 1]}, ${lut[index * 3 + 2]})`
 
+// Neither end of a ramp identifies its theme: every one starts near-black and
+// ends near-white, so endpoint swatches all read as black-to-white. The most
+// chromatic entry is the hue a reader actually associates with the theme.
+const mostChromaticIndex = lut => {
+  let bestIndex = 0
+  let bestChroma = -1
+  for (let i = 0; i < SPECTROGRAM_LUT_SIZE; i++) {
+    const red = lut[i * 3]
+    const green = lut[i * 3 + 1]
+    const blue = lut[i * 3 + 2]
+    const chroma = Math.max(red, green, blue) - Math.min(red, green, blue)
+    if (chroma > bestChroma) {
+      bestChroma = chroma
+      bestIndex = i
+    }
+  }
+  return bestIndex
+}
+
 const defineTheme = (id, label, interpolate) => {
   const lut = buildLut(interpolate)
   return Object.freeze({
     id,
     label,
     lut,
-    // Extremes of the colour axis: the silent floor and the loudest peak. The
-    // theme picker paints each swatch as a gradient between exactly these two.
-    floorColor: cssRgbAt(lut, 0),
-    peakColor: cssRgbAt(lut, SPECTROGRAM_LUT_SIZE - 1),
+    swatchColor: cssRgbAt(lut, mostChromaticIndex(lut)),
   })
 }
 

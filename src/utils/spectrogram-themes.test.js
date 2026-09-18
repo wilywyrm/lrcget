@@ -37,10 +37,14 @@ describe('spectrogram themes', () => {
     }
   })
 
-  it('reports swatch colours that match the lookup table extremes', () => {
+  it('picks a chromatic mid-tone swatch instead of a washed-out ramp endpoint', () => {
     for (const theme of SPECTROGRAM_THEMES) {
-      expect(theme.floorColor).toBe(`rgb(${channelsAt(theme.lut, 0).join(', ')})`)
-      expect(theme.peakColor).toBe(`rgb(${channelsAt(theme.lut, lastIndex).join(', ')})`)
+      const channels = theme.swatchColor.match(/\d+/g).map(Number)
+      const chroma = Math.max(...channels) - Math.min(...channels)
+      const luminance = (0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]) / 255
+      expect(chroma).toBeGreaterThan(80)
+      expect(luminance).toBeGreaterThan(0.2)
+      expect(luminance).toBeLessThan(0.8)
     }
   })
 
@@ -54,9 +58,9 @@ describe('spectrogram themes', () => {
     }
   })
 
-  it('keeps peaks distinct so unlabeled swatches stay tellable apart', () => {
-    const peaks = SPECTROGRAM_THEMES.map(theme => theme.peakColor)
-    expect(new Set(peaks).size).toBe(peaks.length)
+  it('keeps swatches distinct so unlabeled options stay tellable apart', () => {
+    const swatches = SPECTROGRAM_THEMES.map(theme => theme.swatchColor)
+    expect(new Set(swatches).size).toBe(swatches.length)
   })
 
   it('falls back to the default for unknown, empty or missing ids', () => {

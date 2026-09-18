@@ -83,9 +83,7 @@
                   >
                     <span
                       class="h-4 w-4 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/15"
-                      :style="{
-                        backgroundImage: `linear-gradient(to right, ${theme.floorColor}, ${theme.peakColor})`,
-                      }"
+                      :style="{ backgroundColor: theme.swatchColor }"
                       aria-hidden="true"
                     />
                     <Check
