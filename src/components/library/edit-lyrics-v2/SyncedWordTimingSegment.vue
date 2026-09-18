@@ -23,7 +23,7 @@
       </span>
 
       <div
-        v-if="hoverPreview"
+        v-if="hoverPreview && !dragActive"
         class="absolute inset-y-0 pointer-events-none z-20"
         :style="{ left: `${hoverPreview.splitX}px` }"
       >
@@ -111,6 +111,10 @@ const props = defineProps({
   selectedBoundaryIndices: {
     type: Array,
     default: () => [],
+  },
+  dragActive: {
+    type: Boolean,
+    default: false,
   },
 })
 
@@ -410,8 +414,10 @@ const handleSegmentDoubleClick = event => {
 }
 
 // Suppress click bubbling to the timeline (which would seek) whenever the
-// split preview is rendered. `hoverPreview` is non-null iff the splitter UI
-// is visible, so this guarantees: preview visible -> no seek on click.
+// split preview is rendered. `hoverPreview` is non-null whenever the splitter
+// UI is visible, so this guarantees: preview visible -> no seek on click.
+// (During a drag the preview is hidden, but a drag's click targets the
+// timeline rather than a segment, so this handler is not involved.)
 const handleSegmentClick = event => {
   if (hoverPreview.value) {
     event.stopPropagation()
@@ -419,6 +425,13 @@ const handleSegmentClick = event => {
 }
 
 const handleSegmentHover = event => {
+  // A boundary drag sweeps the pointer across segments, so skip the split
+  // preview while one is in flight instead of previewing splits mid-drag.
+  if (props.dragActive) {
+    hoverPreview.value = null
+    return
+  }
+
   hoverPreview.value = getSplitPreview(event.clientX)
 }
 

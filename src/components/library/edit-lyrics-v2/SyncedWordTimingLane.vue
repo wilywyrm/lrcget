@@ -172,6 +172,7 @@
           :progress-ms="progressMs"
           :selected-boundary-index="selectedBoundaryIndex"
           :selected-boundary-indices="selectedBoundaryIndices"
+          :drag-active="isBoundaryDragActive"
           @split-at="handleSegmentSplitAt"
         />
 
@@ -493,6 +494,8 @@ const { endDragState, isDraggingEnd, startEndDrag, cancelEndDrag } = useEditLyri
 const interiorBoundaryIndexes = computed(() =>
   boundaryIndexes.value.filter(index => index > 0)
 )
+
+const isBoundaryDragActive = computed(() => Boolean(dragState.value) || Boolean(endDragState.value))
 
 const playheadPercent = computed(() => {
   if (!isWordSyncAvailable.value) return 0
