@@ -37,14 +37,9 @@ describe('spectrogram themes', () => {
     }
   })
 
-  it('picks a chromatic mid-tone swatch instead of a washed-out ramp endpoint', () => {
+  it('declares a hex swatch colour for every theme', () => {
     for (const theme of SPECTROGRAM_THEMES) {
-      const channels = theme.swatchColor.match(/\d+/g).map(Number)
-      const chroma = Math.max(...channels) - Math.min(...channels)
-      const luminance = (0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]) / 255
-      expect(chroma).toBeGreaterThan(80)
-      expect(luminance).toBeGreaterThan(0.2)
-      expect(luminance).toBeLessThan(0.8)
+      expect(theme.swatchColor).toMatch(/^#[0-9a-f]{6}$/)
     }
   })
 

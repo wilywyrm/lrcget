@@ -25,42 +25,17 @@ const buildLut = interpolate => {
   return lut
 }
 
-const cssRgbAt = (lut, index) =>
-  `rgb(${lut[index * 3]}, ${lut[index * 3 + 1]}, ${lut[index * 3 + 2]})`
-
-// Neither end of a ramp identifies its theme: every one starts near-black and
-// ends near-white, so endpoint swatches all read as black-to-white. The most
-// chromatic entry is the hue a reader actually associates with the theme.
-const mostChromaticIndex = lut => {
-  let bestIndex = 0
-  let bestChroma = -1
-  for (let i = 0; i < SPECTROGRAM_LUT_SIZE; i++) {
-    const red = lut[i * 3]
-    const green = lut[i * 3 + 1]
-    const blue = lut[i * 3 + 2]
-    const chroma = Math.max(red, green, blue) - Math.min(red, green, blue)
-    if (chroma > bestChroma) {
-      bestChroma = chroma
-      bestIndex = i
-    }
-  }
-  return bestIndex
-}
-
-const defineTheme = (id, label, interpolate) => {
-  const lut = buildLut(interpolate)
-  return Object.freeze({
+const defineTheme = (id, label, swatchColor, interpolate) =>
+  Object.freeze({
     id,
     label,
-    lut,
-    swatchColor: cssRgbAt(lut, mostChromaticIndex(lut)),
+    swatchColor,
+    lut: buildLut(interpolate),
   })
-}
 
 // Blue and green are Aegisub-flavoured ramps: a black floor climbing through the
 // hue to a pale — not white — peak, mirroring how inferno tops out at pale
-// yellow. Capping below white keeps the two-extreme swatches readable as "blue"
-// and "green" instead of collapsing to greyscale.
+// yellow rather than blowing out to white.
 //
 // They run through `interpolateRgbBasis`, the same builder d3-scale-chromatic
 // uses for its own named ramps (`interpolateBlues` is exactly
@@ -71,9 +46,9 @@ const BLUE_STOPS = ['#000004', '#0a2f6b', '#2a7fc0', '#7fd4f0', '#cdf0ff']
 const GREEN_STOPS = ['#000400', '#0b3b16', '#1f9a3c', '#62d967', '#d6ffcc']
 
 export const SPECTROGRAM_THEMES = Object.freeze([
-  defineTheme('inferno', 'Inferno', interpolateInferno),
-  defineTheme('blue', 'Blue', interpolateRgbBasis(BLUE_STOPS)),
-  defineTheme('green', 'Green', interpolateRgbBasis(GREEN_STOPS)),
+  defineTheme('inferno', 'Inferno', '#fb9606', interpolateInferno),
+  defineTheme('blue', 'Blue', '#317eb8', interpolateRgbBasis(BLUE_STOPS)),
+  defineTheme('green', 'Green', '#38ae4b', interpolateRgbBasis(GREEN_STOPS)),
 ])
 
 export const DEFAULT_SPECTROGRAM_THEME_ID = 'inferno'
