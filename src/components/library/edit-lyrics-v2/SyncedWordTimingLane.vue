@@ -480,7 +480,6 @@ const { endDragState, isDraggingEnd, startEndDrag, cancelEndDrag } = useEditLyri
   lineEndMs: laneEndMs,
   selectedLineIndex: computed(() => props.selectedLineIndex),
   onCommitLineEnd: payload => emit('set-line-end', payload),
-  onLineEndEdited: payload => emit('word-timing-edited', payload),
 })
 
 const interiorBoundaryIndexes = computed(() =>

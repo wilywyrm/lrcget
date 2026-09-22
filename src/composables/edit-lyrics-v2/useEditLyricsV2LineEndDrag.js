@@ -8,6 +8,9 @@ const DRAG_THRESHOLD = 3
 // commit moves the line end (and, via setLineEndMs upstream, the last word's
 // explicit end) together. A short press without crossing DRAG_THRESHOLD is left
 // for the caller's click handler (which nudges/expands instead of trimming).
+// Committing deliberately leaves playback alone, unlike the word-boundary
+// drag's replay: this edits the line end, so seeking back to the line start
+// would be incoherent, and the row-level end nudge is playback-neutral too.
 export function useEditLyricsV2LineEndDrag({
   isWordSyncAvailable,
   words,
@@ -15,7 +18,6 @@ export function useEditLyricsV2LineEndDrag({
   lineEndMs,
   selectedLineIndex,
   onCommitLineEnd,
-  onLineEndEdited,
 }) {
   const endDragState = ref(null)
   const isDraggingEnd = ref(false)
@@ -68,13 +70,6 @@ export function useEditLyricsV2LineEndDrag({
       lineIndex: selectedLineIndex.value,
       endMs,
     })
-
-    if (typeof onLineEndEdited === 'function') {
-      onLineEndEdited({
-        lineIndex: selectedLineIndex.value,
-        startMs: lineStartMs.value,
-      })
-    }
 
     return true
   }
