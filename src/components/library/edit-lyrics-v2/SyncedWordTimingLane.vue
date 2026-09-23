@@ -134,6 +134,7 @@
         ref="timelineElement"
         class="relative flex-1 bg-white dark:bg-neutral-900 rounded border border-neutral-300 dark:border-neutral-600 transition-opacity duration-200 cursor-pointer"
         :class="{ 'opacity-50': !hasActualWords }"
+        @pointerdown="handleTimelinePointerDown"
         @click="handleTimelineClick"
       >
         <!-- Timeline grid lines (every 500ms) -->
@@ -548,11 +549,24 @@ const getWordEndMs = index => {
   return Number.isFinite(nextWordStart) ? nextWordStart : laneEndMs.value
 }
 
+// Click-to-seek is decided by where the press started, not by drag state: a
+// commit's own reactive update fires the selectedLine watcher, which cancels
+// the drag and clears the isDragging flags in a microtask, before the click is
+// dispatched. Boundary/arrow pointerdowns stopPropagation, so only a press that
+// reaches the timeline arms it.
+const isTimelineClickArmed = ref(false)
+
+const handleTimelinePointerDown = () => {
+  isTimelineClickArmed.value = true
+}
+
 const handleBoundaryPointerDown = (rightWordIndex, event) => {
+  isTimelineClickArmed.value = false
   startBoundaryDrag(rightWordIndex, event, clientXToTime)
 }
 
 const handleEndPointerDown = event => {
+  isTimelineClickArmed.value = false
   startEndDrag(event, clientXToTime)
 }
 
@@ -795,9 +809,10 @@ const handleResetWords = async () => {
 const handleTimelineClick = event => {
   event.stopPropagation()
   // Releasing a boundary/arrow drag dispatches its click on the timeline (the
-  // common ancestor of the button and the release target), so the button's
-  // own @click.stop never sees it. Without this the release would seek.
-  if (isDraggingBoundary.value || isDraggingEnd.value) return
+  // common ancestor of the button and the release target), so the button's own
+  // @click.stop never sees it. Only seek when the press started on the lane.
+  if (!isTimelineClickArmed.value) return
+  isTimelineClickArmed.value = false
   if (laneEndMs.value <= laneStartMs.value) return
   const rect = timelineElement.value?.getBoundingClientRect()
   if (!rect || rect.width <= 0) return
