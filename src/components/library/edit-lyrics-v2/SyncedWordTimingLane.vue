@@ -794,6 +794,10 @@ const handleResetWords = async () => {
 
 const handleTimelineClick = event => {
   event.stopPropagation()
+  // Releasing a boundary/arrow drag dispatches its click on the timeline (the
+  // common ancestor of the button and the release target), so the button's
+  // own @click.stop never sees it. Without this the release would seek.
+  if (isDraggingBoundary.value || isDraggingEnd.value) return
   if (laneEndMs.value <= laneStartMs.value) return
   const rect = timelineElement.value?.getBoundingClientRect()
   if (!rect || rect.width <= 0) return
