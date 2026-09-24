@@ -60,9 +60,12 @@ const mergeLeadingKana = (leading, reading) => {
 // Latin (romaji stores the full word per LYRICSFILE §5b) is returned unchanged,
 // since folding kana onto Latin would corrupt it. A surface with no kanji, or
 // more than one kanji run (a single ruby can't be aligned), also passes through.
+// Whitespace in the surface (the tokenizer keeps a following space on the cue,
+// e.g. '日 ') is not okurigana and is stripped first; otherwise it would be folded
+// into the reading and spliced into the line-level value as a stray space.
 export const composeReading = (surface, reading) => {
   if (!reading || typeof reading !== 'string' || /[A-Za-z]/u.test(reading)) return reading
-  const chars = Array.from(typeof surface === 'string' ? surface : '')
+  const chars = Array.from(stripWhitespace(surface))
   const kanji = []
   chars.forEach((ch, i) => {
     if (isKanjiChar(ch)) kanji.push(i)

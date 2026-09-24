@@ -310,6 +310,13 @@ describe('composeReading', () => {
     expect(composeReading('沈ん', '')).toBe('')
     expect(composeReading('沈ん', undefined)).toBeUndefined()
   })
+
+  it('does not fold surface whitespace into the reading', () => {
+    expect(composeReading('沈ん ', 'しず')).toBe('しずん')
+    expect(composeReading('今日 ', 'きょう')).toBe('きょう')
+    expect(composeReading(' お客', 'きゃく')).toBe('おきゃく')
+    expect(composeReading('沈ん\u3000', 'しず')).toBe('しずん')
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -358,6 +365,27 @@ describe('okurigana line reconstruction', () => {
       2
     )
     expect(result).toBe('たいようがしづんでいく')
+  })
+
+  it('propagate inserts no space when the cue text carries a trailing space (沈ん )', () => {
+    const cues = ruby => [
+      cue('太陽', 'hira', 'たいよう'),
+      cue('が'),
+      cue('沈ん ', 'hira', ruby),
+      cue('で'),
+      cue('いく'),
+    ]
+    expect(propagateCueEditToLine('たいようがしずんでいく', cues('しず'), cues('しづ'), 'hira', 2)).toBe(
+      'たいようがしづんでいく'
+    )
+    expect(propagateCueEditToLine('たいようがしずん でいく', cues('しず'), cues('しづ'), 'hira', 2)).toBe(
+      'たいようがしづん でいく'
+    )
+  })
+
+  it('propagate inserts no space for a pure-kanji cue with a trailing space (今日 )', () => {
+    const cues = ruby => [cue('今日 ', 'hira', ruby), cue('は')]
+    expect(propagateCueEditToLine('きょうは', cues('きょう'), cues('こんにち'), 'hira', 0)).toBe('こんにちは')
   })
 })
 
