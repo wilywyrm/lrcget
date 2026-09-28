@@ -93,7 +93,7 @@ export const effectiveReading = (word, systemId) => {
 }
 
 // A romanization system is any BCP-47 tag carrying a `Latn` script subtag
-// (ja-Latn, zh-Latn-pinyin, ko-Latn, de-Latn, …). Compared case-insensitively
+// (ja-Latn, zh-Latn, ko-Latn, de-Latn, …). Compared case-insensitively
 // because some servers lowercase tags on the wire. Excludes ja-Hrkt, zh-Bopo, etc.
 export const isRomanizationSystem = system => {
   if (typeof system !== 'string') return false

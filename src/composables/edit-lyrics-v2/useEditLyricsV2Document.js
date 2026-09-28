@@ -19,7 +19,7 @@ const MIN_WORD_DURATION_MS = 10
 export const TRANSLITERATION_PRESETS = {
   Furigana: 'ja-Hrkt',
   Romaji: 'ja-Latn',
-  Pinyin: 'zh-Latn-pinyin',
+  Pinyin: 'zh-Latn',
   Zhuyin: 'zh-Bopo',
   Romaja: 'ko-Latn',
 }

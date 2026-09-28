@@ -50,6 +50,12 @@ const createDoc = (content = FIXTURE) =>
     toast: { success: vi.fn(), error: vi.fn() },
   })
 
+describe('TRANSLITERATION_PRESETS', () => {
+  it('tags Pinyin as zh-Latn', () => {
+    expect(TRANSLITERATION_PRESETS.Pinyin).toBe('zh-Latn')
+  })
+})
+
 describe('deriveTransliterationId', () => {
   it('maps known preset names to short bases', () => {
     expect(deriveTransliterationId('Furigana', [])).toBe('hira')

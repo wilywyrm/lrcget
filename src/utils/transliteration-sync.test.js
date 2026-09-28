@@ -67,6 +67,7 @@ describe('isRomanizationSystem', () => {
   it('detects Latin-script systems', () => {
     expect(isRomanizationSystem('ja-Latn')).toBe(true)
     expect(isRomanizationSystem('zh-Latn-pinyin')).toBe(true)
+    expect(isRomanizationSystem('zh-Latn')).toBe(true)
     expect(isRomanizationSystem('ko-Latn')).toBe(true)
     expect(isRomanizationSystem('de-Latn')).toBe(true)
   })
